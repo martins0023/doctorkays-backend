@@ -6,6 +6,7 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 const nodemailer = require('nodemailer');
 const { MailerSend, EmailParams, Sender, Recipient } = require("mailersend"); 
+const Question  = require('./models/Question');
 //const dotenv = require('dotenv');
 
 const app = express();
@@ -68,6 +69,58 @@ const VolunteerSchema = new mongoose.Schema({
 });
 
 const Volunteer = mongoose.model("Volunteer", ContactSchema);
+
+// Create a new question
+app.post('/api/questions', async (req, res) => {
+  try {
+    const newQuestion = new Question(req.body);
+    const savedQuestion = await newQuestion.save();
+    res.status(201).json(savedQuestion);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Retrieve all questions
+app.get('/api/questions', async (req, res) => {
+  try {
+    const questions = await Question.find().sort({ date: -1 });
+    res.json(questions);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Add a comment to a question
+app.post('/api/questions/:id/comments', async (req, res) => {
+  try {
+    const question = await Question.findById(req.params.id);
+    if (!question) return res.status(404).json({ error: 'Question not found' });
+
+    question.comments.push(req.body);
+    const updatedQuestion = await question.save();
+    res.status(201).json(updatedQuestion);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Update likes or dislikes
+app.patch('/api/questions/:id/reactions', async (req, res) => {
+  try {
+    const { type } = req.body; // 'like' or 'dislike'
+    const question = await Question.findById(req.params.id);
+    if (!question) return res.status(404).json({ error: 'Question not found' });
+
+    if (type === 'like') question.likes += 1;
+    else if (type === 'dislike') question.dislikes += 1;
+
+    const updatedQuestion = await question.save();
+    res.json(updatedQuestion);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
 
 //volunteer endpoint
 app.post("/api/volunteer", async (req, res) => {
