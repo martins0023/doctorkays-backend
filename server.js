@@ -198,6 +198,9 @@ app.post("/api/free-subscription", async (req, res) => {
 Thank you for subscribing to our ${consultationType} service for free.
 
 We have received your subscription and will get back to you shortly.
+You will be booked in accordance to the Middle East Time Zone, but no hassle an update would be sent before the consultation day.
+. 2am - 3am
+. 2pm - 3pm
 
 Best Regards,
 Doctor Kays Team`,
