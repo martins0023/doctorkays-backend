@@ -174,11 +174,10 @@ app.post("/api/volunteer", async (req, res) => {
 
 app.post("/api/free-subscription", async (req, res) => {
   try {
-    const { name, email, consultationType } = req.body;
-
-    // Example: Save free subscription data to your database if needed
-    // const freeSub = new FreeSubscription({ name, email, consultationType });
-    // await freeSub.save();
+    // Save free subscription data into Consultation collection
+    const consultationData = req.body;
+    const consultation = new Consultation(consultationData);
+    await consultation.save();
 
     // Set up your nodemailer transporter (ensure EMAIL_USER and EMAIL_PASS are set)
     const transporter = nodemailer.createTransport({
@@ -193,17 +192,16 @@ app.post("/api/free-subscription", async (req, res) => {
       from: process.env.EMAIL_USER,
       to: email,
       subject: "Your Free Subscription is Confirmed!",
-      text: `Hi ${name},
+      text: `Hi ${consultationData.name},,
 
-Thank you for subscribing to our ${consultationType} service for free.
+Thank you for subscribing to our ${consultationData.consultationType} Service.
 
-We have received your subscription and will get back to you shortly.
-You will be booked in accordance to the Middle East Time Zone, but no hassle an update would be sent before the consultation day.
-. 2am - 3am
-. 2pm - 3pm
+We have received your subscription and will get back to you within 24hrs.
+
+For Private audio or video consultation, you can subscribe to either our Silver or Gold subscription package.
 
 Best Regards,
-Doctor Kays Team`,
+Doctor Kays Team.`,
     };
 
     await transporter.sendMail(mailOptions);
