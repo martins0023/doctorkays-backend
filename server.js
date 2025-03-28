@@ -172,6 +172,47 @@ app.post("/api/volunteer", async (req, res) => {
   }
 });
 
+app.post("/api/free-subscription", async (req, res) => {
+  try {
+    const { name, email, consultationType } = req.body;
+
+    // Example: Save free subscription data to your database if needed
+    // const freeSub = new FreeSubscription({ name, email, consultationType });
+    // await freeSub.save();
+
+    // Set up your nodemailer transporter (ensure EMAIL_USER and EMAIL_PASS are set)
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "Your Free Subscription is Confirmed!",
+      text: `Hi ${name},
+
+Thank you for subscribing to our ${consultationType} service for free.
+
+We have received your subscription and will get back to you shortly.
+
+Best Regards,
+Doctor Kays Team`,
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.status(200).json({ message: "Free subscription confirmation email sent successfully" });
+  } catch (err) {
+    console.error("Error sending free subscription email:", err);
+    res.status(500).json({ error: "Error sending free subscription email" });
+  }
+});
+
+
 //contact endpoint
 app.post("/api/contact", async (req, res) => {
   console.log("Received POST /api/contact with body:", req.body);
