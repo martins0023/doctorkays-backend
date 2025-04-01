@@ -174,13 +174,13 @@ app.post("/api/volunteer", async (req, res) => {
 
 app.post("/api/free-subscription", async (req, res) => {
   try {
-    const { name, email, consultationType } = req.body;
+    const { name, email, consultationType, story } = req.body;
 
     // Example: Save free subscription data to your database if needed
     // const freeSub = new FreeSubscription({ name, email, consultationType });
     // await freeSub.save();
 
-    // Set up your nodemailer transporter (ensure EMAIL_USER and EMAIL_PASS are set)
+    // Set up your nodemailer transporter 
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -189,6 +189,7 @@ app.post("/api/free-subscription", async (req, res) => {
       },
     });
 
+    // Email to the registered user
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: email,
@@ -205,7 +206,27 @@ Best Regards,
 Doctor Kays Team`,
     };
 
-    await transporter.sendMail(mailOptions);
+    // Email to Dr. Kays official email
+    const adminMailOptions = {
+      from: process.env.EMAIL_USER,
+      to: "drkaysofficial@gmail.com",
+      subject: `New ${consultationType} Registered`,
+      text: `A new ${consultationType} has been registered.
+
+Name: ${name}
+Email: ${email}
+Consultation Type: ${consultationType}
+History: ${story}
+
+Please follow up accordingly.`,
+    };
+
+
+    // Send both emails concurrently
+    await Promise.all([
+      transporter.sendMail(mailOptions),
+      transporter.sendMail(adminMailOptions),
+    ]);
 
     res.status(200).json({ message: "Free subscription confirmation email sent successfully" });
   } catch (err) {
