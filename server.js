@@ -1,11 +1,13 @@
 // server.js
-
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
+const multer = require('multer'); // Import multer
+const { GridFsStorage } = require("multer-gridfs-storage");
+const Grid = require("gridfs-stream");
 const nodemailer = require('nodemailer');
-const { MailerSend, EmailParams, Sender, Recipient } = require("mailersend"); 
+const { MailerSend, EmailParams, Sender, Recipient } = require("mailersend");
 const Question  = require('./models/Question');
 //const dotenv = require('dotenv');
 
@@ -14,12 +16,57 @@ app.use(cors());
 app.use(express.json());
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGOURI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log("MongoDB connected"))
-.catch((err) => console.error("MongoDB connection error:", err));
+const mongoURI = process.env.MONGOURI;
+mongoose
+  .connect(mongoURI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => console.error("MongoDB connection error:", err));
+
+// Get Mongoose connection
+const conn = mongoose.connection;
+let gfs;
+let upload;
+
+// Wait for MongoDB to connect before initializing GridFS
+conn.once("open", () => {
+  console.log("Connected to MongoDB successfully");
+
+  // Initialize GridFS
+  gfs = Grid(conn.db, mongoose.mongo);
+  gfs.collection("uploads");
+
+  // Initialize Multer GridFS Storage
+  const gridStorage  = new GridFsStorage({
+    db: conn.db, // Pass the connected db instance
+    file: (req, file) => ({
+      filename: file.originalname,
+      bucketName: "uploads",
+    }),
+  });
+
+  upload = multer({ storage: gridStorage });
+});
+
+// Middleware to wait until "upload" is defined
+const waitForUpload = (req, res, next) => {
+  if (upload) {
+    // Once upload is available, call upload.single with the field name
+    return upload.single("reportFile")(req, res, next);
+  } else {
+    // Check again after a short delay
+    setTimeout(() => waitForUpload(req, res, next), 100);
+  }
+};
+
+// Required file types
+const fileRequiredTypes = [
+  "Blood Tests",
+  "Scan Reports",
+  "Blood Tests and Scan Report",
+];
 
 // Define a Mongoose schema for consultation bookings
 const consultationSchema = new mongoose.Schema({
@@ -172,13 +219,44 @@ app.post("/api/volunteer", async (req, res) => {
   }
 });
 
-app.post("/api/free-subscription", async (req, res) => {
+// Endpoint to save consultation details
+app.post('/api/consultation', async (req, res) => {
+  try {
+    const consultationData = req.body;
+    const consultation = new Consultation(consultationData);
+    await consultation.save();
+    res.status(200).json({ message: "Consultation data saved", consultation });
+  } catch (err) {
+    console.error("Error saving consultation:", err);
+    res.status(500).json({ error: "Error saving consultation data" });
+  }
+});
+
+app.post("/api/free-subscription", waitForUpload, async (req, res) => {
   try {
     const { name, email, consultationType, story } = req.body;
+    let fileId = null;
+    let fileName = null;
 
-    // Example: Save free subscription data to your database if needed
-    // const freeSub = new FreeSubscription({ name, email, consultationType });
-    // await freeSub.save();
+    // Check if the consultation type requires a file and if a file was uploaded
+    if (fileRequiredTypes.includes(consultationType) && req.file) {
+      fileId = req.file.id;
+      fileName = req.file.filename;
+    }
+
+    // Save free subscription details in the Consultation database
+    const freeConsultation = new Consultation({
+      name,
+      email,
+      consultationType,
+      story,
+      reportFileId: fileId, // Store file ID if uploaded
+      reportFileName: fileName,
+      // isFreeSubscription: true,  // Optional flag for record-keeping
+      // status: "pending",         // Can be updated later when handled
+    });
+
+    await freeConsultation.save();
 
     // Set up your nodemailer transporter 
     const transporter = nodemailer.createTransport({
@@ -209,7 +287,7 @@ Doctor Kays Team`,
     // Email to Dr. Kays official email
     const adminMailOptions = {
       from: process.env.EMAIL_USER,
-      to: "drkaysofficial@gmail.com",
+      to: "martinsmiracle45@gmail.com",
       subject: `New ${consultationType} Registered`,
       text: `A new ${consultationType} has been registered.
 
@@ -219,6 +297,15 @@ Consultation Type: ${consultationType}
 History: ${story}
 
 Please follow up accordingly.`,
+      attachments: fileId
+        ? [
+            {
+              filename: fileName,
+              // Instead of a file path, we create a read stream from GridFS:
+              content: gfs.createReadStream({ _id: fileId }),
+            },
+          ]
+        : [],
     };
 
 
@@ -294,19 +381,6 @@ app.post("/api/sponsor", async (req, res) => {
     const sponsor = new Sponsor(sponsorData);
     await sponsor.save();
     res.status(200).json({ message: "Sponsorship data saved", sponsor });
-  } catch (err) {
-    console.error("Error saving consultation:", err);
-    res.status(500).json({ error: "Error saving consultation data" });
-  }
-});
-
-// Endpoint to save consultation details
-app.post('/api/consultation', async (req, res) => {
-  try {
-    const consultationData = req.body;
-    const consultation = new Consultation(consultationData);
-    await consultation.save();
-    res.status(200).json({ message: "Consultation data saved", consultation });
   } catch (err) {
     console.error("Error saving consultation:", err);
     res.status(500).json({ error: "Error saving consultation data" });
