@@ -291,7 +291,7 @@ Doctor Kays Team`,
     // Email to Dr. Kay's official email (with file attachment)
     const adminMailOptions = {
       from: process.env.EMAIL_USER,
-      to: "martinsmiracle45@gmail.com",
+      to: process.env.EMAIL_TO_FORWARD,
       subject: `New ${consultationType} Registered`,
       text: `A new ${consultationType} has been registered.
 
