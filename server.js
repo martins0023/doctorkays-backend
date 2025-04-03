@@ -122,6 +122,20 @@ app.post('/api/questions', async (req, res) => {
   }
 });
 
+// retrieve a single question by ID
+app.get('/api/questions/:id', async (req, res) => {
+  try {
+    const question = await Question.findById(req.params.id);
+    if (!question) {
+      return res.status(404).json({ error: 'Question not found' });
+    }
+    res.json(question);
+  } catch (err) {
+    console.error("Error fetching question:", err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Retrieve all questions
 app.get('/api/questions', async (req, res) => {
   try {
