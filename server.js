@@ -1,72 +1,40 @@
+
+
 // server.js
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const multer = require('multer'); // Import multer
-const { GridFsStorage } = require("multer-gridfs-storage");
-const Grid = require("gridfs-stream");
 const nodemailer = require('nodemailer');
-const { MailerSend, EmailParams, Sender, Recipient } = require("mailersend");
+const { MailerSend, EmailParams, Sender, Recipient } = require("mailersend"); 
 const Question  = require('./models/Question');
+const cloudinary = require('cloudinary').v2;
 //const dotenv = require('dotenv');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Connect to MongoDB
-const mongoURI = process.env.MONGOURI;
-mongoose
-  .connect(mongoURI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  .then(() => console.log("MongoDB connected"))
-  .catch((err) => console.error("MongoDB connection error:", err));
-
-// Get Mongoose connection
-const conn = mongoose.connection;
-let gfs;
-let upload;
-
-// Wait for MongoDB to connect before initializing GridFS
-conn.once("open", () => {
-  console.log("Connected to MongoDB successfully");
-
-  // Initialize GridFS
-  gfs = Grid(conn.db, mongoose.mongo);
-  gfs.collection("uploads");
-
-  // Initialize Multer GridFS Storage
-  const gridStorage  = new GridFsStorage({
-    db: conn.db, // Pass the connected db instance
-    file: (req, file) => ({
-      filename: file.originalname,
-      bucketName: "uploads",
-    }),
-  });
-
-  upload = multer({ storage: gridStorage });
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,   
+  api_key: process.env.CLOUDINARY_API_KEY,          // your api key
+  api_secret: process.env.CLOUDINARY_API_SECRET       // your api secret
 });
 
-// Middleware to wait until "upload" is defined
-const waitForUpload = (req, res, next) => {
-  if (upload) {
-    // Once upload is available, call upload.single with the field name
-    return upload.single("reportFile")(req, res, next);
-  } else {
-    // Check again after a short delay
-    setTimeout(() => waitForUpload(req, res, next), 100);
-  }
-};
+// Use multer with memory storage so we can send the file to Cloudinary
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
-// Required file types
-const fileRequiredTypes = [
-  "Blood Tests",
-  "Scan Reports",
-  "Blood Tests and Scan Report",
-];
+// Connect to MongoDB
+mongoose.connect(process.env.MONGOURI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+.then(() => console.log("MongoDB connected"))
+.catch((err) => console.error("MongoDB connection error:", err));
 
 // Define a Mongoose schema for consultation bookings
 const consultationSchema = new mongoose.Schema({
@@ -75,11 +43,37 @@ const consultationSchema = new mongoose.Schema({
   phone: String,
   consultationType: String,
   price: String,
+  story: String,
+  reportFileUrl: String, // New field to store Cloudinary URL
   createdAt: { type: Date, default: Date.now },
 });
 
 const Consultation = mongoose.model("Consultation", consultationSchema);
 
+// Define required file types for which file upload is necessary
+const fileRequiredTypes = [
+  "Blood Tests",
+  "Scan Reports",
+  "Blood Tests and Scan Report",
+];
+
+// Helper function to upload file to Cloudinary using a stream
+const uploadToCloudinary = (fileBuffer) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: "consultationReports", 
+        resource_type: "raw",
+        access_mode: "public",
+        type: "upload",
+    },
+      (error, result) => {
+        if (result) resolve(result);
+        else reject(error);
+      }
+    );
+    stream.end(fileBuffer);
+  });
+};
 
 // define mongoose for sponsorship
 const sponsorSchema = new mongoose.Schema({
@@ -115,7 +109,7 @@ const VolunteerSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-const Volunteer = mongoose.model("Volunteer", ContactSchema);
+const Volunteer = mongoose.model("Volunteer", VolunteerSchema);
 
 // Create a new question
 app.post('/api/questions', async (req, res) => {
@@ -232,16 +226,28 @@ app.post('/api/consultation', async (req, res) => {
   }
 });
 
-app.post("/api/free-subscription", waitForUpload, async (req, res) => {
+app.post("/api/free-subscription", upload.single("reportFile"), async (req, res) => {
   try {
+    console.log("Received request for free subscription:", req.body);
     const { name, email, consultationType, story } = req.body;
-    let fileId = null;
-    let fileName = null;
+    let fileUrl = null;
+    let fileAttachment = null;
 
     // Check if the consultation type requires a file and if a file was uploaded
     if (fileRequiredTypes.includes(consultationType) && req.file) {
-      fileId = req.file.id;
-      fileName = req.file.filename;
+      console.log("File uploaded, proceeding to Cloudinary and email attachment.");
+      
+      // Upload to Cloudinary (optional if you still want a backup URL)
+      const cloudinaryResult = await uploadToCloudinary(req.file.buffer);
+      fileUrl = cloudinaryResult.secure_url;
+      console.log("Cloudinary upload successful. File URL:", fileUrl);
+
+      // Prepare file attachment for email
+      fileAttachment = {
+        filename: req.file.originalname,  // Keep original filename
+        content: req.file.buffer,         // Attach the file buffer
+        contentType: req.file.mimetype,   // Maintain original MIME type (e.g., application/pdf)
+      };
     }
 
     // Save free subscription details in the Consultation database
@@ -250,15 +256,13 @@ app.post("/api/free-subscription", waitForUpload, async (req, res) => {
       email,
       consultationType,
       story,
-      reportFileId: fileId, // Store file ID if uploaded
-      reportFileName: fileName,
-      // isFreeSubscription: true,  // Optional flag for record-keeping
-      // status: "pending",         // Can be updated later when handled
+      reportFileUrl: fileUrl, // Store Cloudinary URL if available
     });
 
     await freeConsultation.save();
+    console.log("Free consultation record saved successfully.");
 
-    // Set up your nodemailer transporter 
+    // Set up Nodemailer transporter 
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -284,7 +288,7 @@ Best Regards,
 Doctor Kays Team`,
     };
 
-    // Email to Dr. Kays official email
+    // Email to Dr. Kay's official email (with file attachment)
     const adminMailOptions = {
       from: process.env.EMAIL_USER,
       to: "martinsmiracle45@gmail.com",
@@ -297,17 +301,8 @@ Consultation Type: ${consultationType}
 History: ${story}
 
 Please follow up accordingly.`,
-      attachments: fileId
-        ? [
-            {
-              filename: fileName,
-              // Instead of a file path, we create a read stream from GridFS:
-              content: gfs.createReadStream({ _id: fileId }),
-            },
-          ]
-        : [],
+      attachments: fileAttachment ? [fileAttachment] : [], // Attach the file if available
     };
-
 
     // Send both emails concurrently
     await Promise.all([
@@ -315,12 +310,14 @@ Please follow up accordingly.`,
       transporter.sendMail(adminMailOptions),
     ]);
 
+    console.log("Emails sent successfully.");
     res.status(200).json({ message: "Free subscription confirmation email sent successfully" });
   } catch (err) {
     console.error("Error sending free subscription email:", err);
     res.status(500).json({ error: "Error sending free subscription email" });
   }
 });
+
 
 
 //contact endpoint
