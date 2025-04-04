@@ -8,6 +8,7 @@ const commentSchema = new mongoose.Schema({
 
 const questionSchema = new mongoose.Schema({
   user: String,
+  title: String,
   question: String,
   hasDoctorReplied: { type: Boolean, default: false },
   likes: { type: Number, default: 0 },
