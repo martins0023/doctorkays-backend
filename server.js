@@ -3,6 +3,7 @@
 // server.js
 
 require('dotenv').config();
+const crypto = require("crypto");
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -11,6 +12,13 @@ const nodemailer = require('nodemailer');
 const { MailerSend, EmailParams, Sender, Recipient } = require("mailersend"); 
 const Question  = require('./models/Question');
 const cloudinary = require('cloudinary').v2;
+const Admin = require('./models/Admin');
+const jwt = require('jsonwebtoken');
+const axios = require('axios');
+
+const adminAuth = require('./middleware/authMiddleware');
+const sendLoginAlert = require('./utils/sendLoginAlert')
+const sendVerificationEmail = require('./utils/sendVerificationEmail')
 //const dotenv = require('dotenv');
 
 const app = express();
@@ -111,6 +119,190 @@ const VolunteerSchema = new mongoose.Schema({
 
 const Volunteer = mongoose.model("Volunteer", VolunteerSchema);
 
+//
+// Get logged-in admin info
+app.get('/api/admin/me', adminAuth, async (req, res) => {
+  try {
+    const admin = await Admin.findById(req.admin.id).select("-password"); // omit password
+    if (!admin) return res.status(404).json({ error: "Admin not found" });
+    res.json(admin);
+  } catch (error) {
+    console.error("Stats error:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// PUT endpoint to update logged-in admin info
+app.put('/api/admin/me', adminAuth, async (req, res) => {
+  try {
+    const { firstName, lastName, email, contact, address1, password } = req.body;
+    const admin = await Admin.findById(req.admin.id);
+    if (!admin) return res.status(404).json({ error: "Admin not found" });
+
+    // Update fields if provided
+    admin.firstName = firstName || admin.firstName;
+    admin.lastName = lastName || admin.lastName;
+    admin.email = email || admin.email;
+    admin.contact = contact || admin.contact;
+    admin.address1 = address1 || admin.address1;
+    if (password) {
+      admin.password = password; // Note: ensure that your Admin schema has a pre-save hook to hash the password.
+    }
+    await admin.save();
+    res.json({ message: "Profile updated successfully", admin });
+  } catch (error) {
+    console.error("Error updating admin:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
+//get stats
+app.get('/api/admin/stats', adminAuth, async (req, res) => {
+  try {
+    const contacts = await Contact.countDocuments();
+    const consultations = await Consultation.countDocuments();
+    const forums = await Question.countDocuments();
+
+    res.json({
+      contacts,
+      consultations,
+      forums,
+    });
+  } catch (error) {
+    console.error("Stats error:", error);
+    res.status(500).json({ error: "Unable to fetch stats" });
+  }
+});
+
+// Admin Registration Endpoint
+// Admin Registration Endpoint
+app.post("/api/admin/register", adminAuth, async (req, res) => {
+  try {
+    const { firstName, lastName, email, contact, address1, password } = req.body;
+    // Check if the email already exists
+    const existingAdmin = await Admin.findOne({ email });
+    if (existingAdmin) {
+      return res.status(400).json({ error: "Admin with that email already exists" });
+    }
+    
+    const admin = new Admin({ firstName, lastName, email, contact, address1, password });
+    await admin.save();
+
+    // Set up your nodemailer transporter
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    // Build the notification email options
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "Admin Privilege Granted",
+      text: `Dear ${firstName} ${lastName},
+
+Your admin account has been created with the email address: ${email}.
+
+Please contact the security team to request your login link and password details.
+
+Best Regards,
+Doctor Kays Team`
+    };
+
+    // Send the notification email
+    await transporter.sendMail(mailOptions);
+
+    res.status(201).json({ message: "Admin registered successfully and notification email sent" });
+  } catch (err) {
+    console.error("Error registering admin:", err);
+    res.status(500).json({ error: "Error registering admin" });
+  }
+});
+
+// Map to temporarily store verification tokens (better to use Redis in prod)
+const pendingLogins = new Map();
+// Admin Login Endpoint
+// POST /api/admin/login
+// Admin Login Endpoint - Step 1: Validate credentials and send verification code
+app.post("/api/admin/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const admin = await Admin.findOne({ email });
+    if (!admin || !(await admin.comparePassword(password))) {
+      return res.status(400).json({ error: "Invalid email or password" });
+    }
+
+    // Generate verification token (8-character hex token)
+    const verificationToken = crypto.randomBytes(4).toString("hex").toUpperCase();
+    const tokenExpiry = Date.now() + 5 * 60 * 1000; // Valid for 5 minutes
+
+    // Store token in memory; in production consider Redis or DB storage
+    pendingLogins.set(email, { token: verificationToken, expires: tokenExpiry });
+
+    // Send verification email
+    await sendVerificationEmail(email, verificationToken);
+
+    // Return explicit flag so the frontend knows to prompt for verification code
+    return res.status(200).json({ 
+      message: "Verification email sent", 
+      verificationSent: true 
+    });
+  } catch (err) {
+    console.error("Login error:", err);
+    return res.status(500).json({ error: "Login failed" });
+  }
+});
+
+// Admin Verification Endpoint - Step 2: Verify token and issue final JWT
+app.post("/api/admin/verify-login", async (req, res) => {
+  try {
+    const { email, token } = req.body;
+    const record = pendingLogins.get(email);
+
+    if (!record || record.token !== token || Date.now() > record.expires) {
+      return res.status(400).json({ error: "Invalid or expired verification token" });
+    }
+
+    // Token is valid; remove the pending record
+    pendingLogins.delete(email);
+
+    // Find the admin and issue a final JWT
+    const admin = await Admin.findOne({ email });
+    if (!admin) {
+      return res.status(404).json({ error: "Admin not found" });
+    }
+    const jwtToken = jwt.sign({ id: admin._id, email: admin.email }, process.env.JWT_SECRET, { expiresIn: "1d" });
+
+    // Get IP address from request
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+    // Use IP to get location data
+    let locationData = {};
+    try {
+      const { data } = await axios.get(`https://ipapi.co/${ip}/json/`);
+      locationData = data;
+    } catch (err) {
+      console.error("Failed to get location data", err.message);
+    }
+
+    // Send login alert email
+    await sendLoginAlert(admin, ip, locationData);
+
+    return res.status(200).json({ 
+      message: "Verification successful", 
+      token: jwtToken 
+    });
+  } catch (err) {
+    console.error("Token verification failed:", err);
+    return res.status(500).json({ error: "Server error during verification" });
+  }
+});
+
+
 // Create a new question
 app.post('/api/questions', async (req, res) => {
   try {
@@ -123,7 +315,7 @@ app.post('/api/questions', async (req, res) => {
 });
 
 // Update answer for a question
-app.put('/api/questions/:id/answer', async (req, res) => {
+app.put('/api/questions/:id/answer', adminAuth, async (req, res) => {
   try {
     const { answer } = req.body;
     const question = await Question.findById(req.params.id);
@@ -139,8 +331,6 @@ app.put('/api/questions/:id/answer', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-
 
 // retrieve a single question by ID
 app.get('/api/questions/:id', async (req, res) => {
@@ -280,6 +470,21 @@ app.post('/api/consultation', async (req, res) => {
     res.status(500).json({ error: "Error saving consultation data" });
   }
 });
+
+// DELETE consultation by ID
+app.delete('/api/consultations/:id', async (req, res) => {
+  try {
+    const consultation = await Consultation.findByIdAndDelete(req.params.id);
+    if (!consultation) {
+      return res.status(404).json({ error: "Consultation not found" });
+    }
+    res.json({ message: "Consultation deleted successfully", consultation });
+  } catch (err) {
+    console.error("Error deleting consultation:", err);
+    res.status(500).json({ error: "Error deleting consultation" });
+  }
+});
+
 
 app.post("/api/free-subscription", upload.single("reportFile"), async (req, res) => {
   try {
@@ -436,6 +641,16 @@ app.post("/api/contact", async (req, res) => {
   } catch (err) {
     console.error("Error saving contact or sending email:", err);
     res.status(500).json({ error: "Error saving contact or sending email" });
+  }
+});
+
+// GET endpoint for retrieving all SPONSOR DATA
+app.get("/api/sponsors", async (req, res) => {
+  try {
+    const sponsors = await Sponsor.find().sort({ createdAt: -1 });
+    res.json(sponsors);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
