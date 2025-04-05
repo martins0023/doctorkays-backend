@@ -15,7 +15,9 @@ Hello ${admin.firstName},
 A login attempt was just made to your admin account.
 
     📍 IP Address: ${ip}
+
     🌍 Location: ${locationData?.city}, ${locationData?.region}, ${locationData?.country}
+    
     🕒 Time: ${new Date().toLocaleString()}
 
 If this was you, you can ignore this message. Otherwise, please secure your account immediately by contacting the admin.

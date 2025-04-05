@@ -264,7 +264,9 @@ app.post("/api/admin/verify-login", async (req, res) => {
     const record = pendingLogins.get(email);
 
     if (!record || record.token !== token || Date.now() > record.expires) {
-      return res.status(400).json({ error: "Invalid or expired verification token" });
+      return res
+        .status(400)
+        .json({ error: "Invalid or expired verification token" });
     }
 
     // Token is valid; remove the pending record
@@ -275,16 +277,33 @@ app.post("/api/admin/verify-login", async (req, res) => {
     if (!admin) {
       return res.status(404).json({ error: "Admin not found" });
     }
-    const jwtToken = jwt.sign({ id: admin._id, email: admin.email }, process.env.JWT_SECRET, { expiresIn: "1d" });
+    const jwtToken = jwt.sign(
+      { id: admin._id, email: admin.email },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
 
     // Get IP address from request
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    let ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+    // If multiple IPs are present, take the first one
+    if (ip && ip.includes(",")) {
+      ip = ip.split(",")[0].trim();
+    }
+    // If the IP is in IPv6 format like "::ffff:192.0.2.128", extract the IPv4 part
+    if (ip && ip.includes("::ffff:")) {
+      ip = ip.split("::ffff:")[1];
+    }
 
     // Use IP to get location data
     let locationData = {};
     try {
-      const { data } = await axios.get(`https://ipapi.co/${ip}/json/`);
-      locationData = data;
+      // Ensure the IP is valid before making the request
+      if (ip && ip !== "127.0.0.1") {
+        const { data } = await axios.get(`https://ipapi.co/${ip}/json/`);
+        locationData = data;
+      } else {
+        console.warn("Localhost IP detected; skipping geolocation lookup.");
+      }
     } catch (err) {
       console.error("Failed to get location data", err.message);
     }
@@ -292,9 +311,9 @@ app.post("/api/admin/verify-login", async (req, res) => {
     // Send login alert email
     await sendLoginAlert(admin, ip, locationData);
 
-    return res.status(200).json({ 
-      message: "Verification successful", 
-      token: jwtToken 
+    return res.status(200).json({
+      message: "Verification successful",
+      token: jwtToken,
     });
   } catch (err) {
     console.error("Token verification failed:", err);
