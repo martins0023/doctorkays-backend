@@ -122,6 +122,26 @@ app.post('/api/questions', async (req, res) => {
   }
 });
 
+// Update answer for a question
+app.put('/api/questions/:id/answer', async (req, res) => {
+  try {
+    const { answer } = req.body;
+    const question = await Question.findById(req.params.id);
+    if (!question) {
+      return res.status(404).json({ error: 'Question not found' });
+    }
+    question.answer = answer;
+    question.hasDoctorReplied = true;
+    const updatedQuestion = await question.save();
+    res.json(updatedQuestion);
+  } catch (err) {
+    console.error("Error updating answer:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+
 // retrieve a single question by ID
 app.get('/api/questions/:id', async (req, res) => {
   try {
@@ -178,6 +198,17 @@ app.patch('/api/questions/:id/reactions', async (req, res) => {
 });
 
 //volunteer endpoint
+//GET ENDPOINT data
+app.get('/api/volunteers', async (req, res) => {
+  try {
+    const volunteer = await Volunteer.find().sort({ createdAt: -1 });
+    res.json(volunteer);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+//POST ENDPOINT
 app.post("/api/volunteer", async (req, res) => {
   console.log("Received POST /api/volunteer with body:", req.body);
   try {
@@ -227,7 +258,17 @@ app.post("/api/volunteer", async (req, res) => {
   }
 });
 
-// Endpoint to save consultation details
+//get consultation data
+app.get('/api/consultations', async (req, res) => {
+  try {
+    const consultation = await Consultation.find().sort({ createdAt: -1 });
+    res.json(consultation);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint for consultation details
 app.post('/api/consultation', async (req, res) => {
   try {
     const consultationData = req.body;
@@ -335,6 +376,19 @@ Please follow up accordingly.`,
 
 
 //contact endpoint
+
+//GET
+// GET endpoint for retrieving all contacts
+app.get("/api/contacts", async (req, res) => {
+  try {
+    const contacts = await Contact.find().sort({ createdAt: -1 });
+    res.json(contacts);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+//POST
 app.post("/api/contact", async (req, res) => {
   console.log("Received POST /api/contact with body:", req.body);
   try {

@@ -10,6 +10,7 @@ const questionSchema = new mongoose.Schema({
   user: String,
   title: String,
   question: String,
+  answer: { type: String, default: "" }, // New field for admin's answer
   hasDoctorReplied: { type: Boolean, default: false },
   likes: { type: Number, default: 0 },
   dislikes: { type: Number, default: 0 },
