@@ -334,7 +334,7 @@ app.post('/api/questions', async (req, res) => {
 });
 
 // Update answer for a question
-app.put('/api/questions/:id/answer', adminAuth, async (req, res) => {
+app.put('/api/questions/:id/answer', async (req, res) => {
   try {
     const { answer } = req.body;
     const question = await Question.findById(req.params.id);
