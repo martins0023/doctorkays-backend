@@ -634,7 +634,7 @@ app.post("/api/contact", async (req, res) => {
     });
 
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: `"KMC HOSPITAL LIMITED." <${process.env.EMAIL_USER}>`,
       to: contactData.email,
       subject: "We’ve received your request!",
       text: `Hi ${contactData.firstName},
