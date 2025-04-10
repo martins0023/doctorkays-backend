@@ -624,7 +624,9 @@ app.post("/api/contact", async (req, res) => {
 
     // 2. Send confirmation email to the user
     const transporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp.zoho.com",
+      port: 465,
+      secure: true, // SSL
       auth: {
         user: process.env.EMAIL_USER, // e.g. your_gmail@gmail.com
         pass: process.env.EMAIL_PASS, // an app password if using 2FA
