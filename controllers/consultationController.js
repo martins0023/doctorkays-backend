@@ -4,6 +4,7 @@ const { MailerSend, EmailParams, Sender, Recipient } = require("mailersend");
 const cloudinary = require("cloudinary").v2;
 
 const Consultation = require("../models/Sponsors");
+const { signatureHtml } = require("../utils/signature");
 
 // Configure Cloudinary
 cloudinary.config({
@@ -127,7 +128,7 @@ exports.addFreeConsultation = async (req, res) => {
 
     // Email to the registered user
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: `"KMC HOSPITAL LIMITED." <${process.env.EMAIL_USER}>`,
       to: email,
       subject: "Your Free Subscription is Confirmed!",
       text: `Hi ${name},
@@ -139,12 +140,13 @@ We have received your subscription and will get back to you within 24hrs.
 For Private audio or video consultation, you can subscribe to either our Silver or Gold subscription package.
 
 Best Regards,
-Doctor Kays Team`,
+Doctor Kays Team
+${signatureHtml}`,
     };
 
     // Email to Dr. Kay's official email (with file attachment if available)
     const adminMailOptions = {
-      from: process.env.EMAIL_USER,
+      from: `"KMC HOSPITAL LIMITED." <${process.env.EMAIL_USER}>`,
       to: process.env.EMAIL_TO_FORWARD, // Or use process.env.EMAIL_TO_FORWARD
       subject: `New ${consultationType} Registered`,
       text: `A new ${consultationType} has been registered.
@@ -154,7 +156,8 @@ Email: ${email}
 Consultation Type: ${consultationType}
 History: ${story}
 
-Please follow up accordingly.`,
+Please follow up accordingly.
+${signatureHtml}`,
       attachments: fileAttachment ? [fileAttachment] : [],
     };
 

@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const { signatureHtml } = require('./signature');
 
 const sendLoginAlert = async (admin, ip, locationData) => {
   const transporter = nodemailer.createTransport({
@@ -26,10 +27,11 @@ If this was you, you can ignore this message. Otherwise, please secure your acco
 
 Regards,
 Doctor kays Admin Security Team
+${signatureHtml}
   `;
 
   await transporter.sendMail({
-    from: process.env.EMAIL_USER,
+    from: `"KMC HOSPITAL LIMITED." <${process.env.EMAIL_USER}>`,
     to: admin.email,
     subject: 'New Admin Login Alert',
     text: message,

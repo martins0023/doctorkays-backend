@@ -1,5 +1,6 @@
 const Volunteer = require("../models/Volunteer");
 const nodemailer = require("nodemailer");
+const { signatureHtml } = require("../utils/signature");
 
 exports.getAllVolunteers = async (req, res) => {
   try {
@@ -31,7 +32,7 @@ exports.addVolunteers = async (req, res) => {
     });
 
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: `"KMC HOSPITAL LIMITED." <${process.env.EMAIL_USER}>`,
       to: volunteerData.email,
       subject: "Your volunteer request has been received!",
       text: `Dear ${volunteerData.firstName},
@@ -46,7 +47,8 @@ exports.addVolunteers = async (req, res) => {
     Thank you for reaching out to becoming a volunteer with us!
     
     Best Regards,
-    Doctor Kays Team`,
+    Doctor Kays Team
+    ${signatureHtml}`,
     };
 
     const info = await transporter.sendMail(mailOptions);

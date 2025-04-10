@@ -12,6 +12,7 @@ const nodemailer = require("nodemailer");
 const multer = require("multer"); // Import multer
 const { default: axios } = require("axios");
 const jwt = require("jsonwebtoken");
+const { signatureHtml } = require("../utils/signature");
 
 exports.registerAdmin = async (req, res) => {
   try {
@@ -48,7 +49,7 @@ exports.registerAdmin = async (req, res) => {
 
     // Build the notification email options
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: `"KMC HOSPITAL LIMITED." <${process.env.EMAIL_USER}>`,
       to: email,
       subject: "Admin Privilege Granted",
       text: `Dear ${firstName} ${lastName},
@@ -58,7 +59,8 @@ exports.registerAdmin = async (req, res) => {
   Please contact the security team to request your login link and password details.
   
   Best Regards,
-  Doctor Kays Team`,
+  Doctor Kays Team
+  ${signatureHtml}`,
     };
 
     // Send the notification email

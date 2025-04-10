@@ -1,5 +1,6 @@
 const Contact = require("../models/Contact");
 const nodemailer = require("nodemailer");
+const { signatureHtml } = require("../utils/signature");
 
 exports.getAllContacts = async (req, res) => {
   try {
@@ -31,23 +32,25 @@ exports.addContacts = async (req, res) => {
     });
 
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: `"KMC HOSPITAL LIMITED." <${process.env.EMAIL_USER}>`,
       to: contactData.email,
       subject: "We’ve received your request!",
-      text: `Hi ${contactData.firstName},
-    
-    We’ve received your message. One of our team members will get back to you soon.
-    
-    Here’s a summary of your request:
-    - Name: ${contactData.firstName} ${contactData.lastName}
-    - Phone: ${contactData.phone}
-    - Services: ${contactData.services.join(", ")}
-    - Message: ${contactData.message}
-    
-    Thank you for reaching out!
-    
-    Best Regards,
-    Doctor Kays Team`,
+      text: `Hi ${contactData.firstName}, We’ve received your request…`,
+
+      html: `
+      <p>Hi ${contactData.firstName},</p>
+      <p>We’ve received your message. One of our team members will get back to you soon.</p>
+      <h4>Summary:</h4>
+      <ul>
+        <li><strong>Name:</strong> ${contactData.firstName} ${
+        contactData.lastName
+      }</li>
+        <li><strong>Phone:</strong> ${contactData.phone}</li>
+        <li><strong>Services:</strong> ${contactData.services.join(", ")}</li>
+        <li><strong>Message:</strong> ${contactData.message}</li>
+      </ul>
+      ${signatureHtml}
+    `,
     };
 
     const info = await transporter.sendMail(mailOptions);
