@@ -81,7 +81,9 @@ exports.addFreeConsultation = async (req, res) => {
   try {
     console.log("Received request for free subscription:", req.body);
     const { name, email, consultationType, story } = req.body;
-    let fileUrl = null;
+    let downloadUrl = null;
+    let originalName = null;
+    let fileFormat = null;
     let fileAttachment = null;
 
     // Check if the consultation type requires a file and if a file was uploaded
@@ -92,12 +94,26 @@ exports.addFreeConsultation = async (req, res) => {
 
       // Upload to Cloudinary (optional if you want a backup URL)
       const cloudinaryResult = await uploadToCloudinary(req.file.buffer);
-      fileUrl = cloudinaryResult.secure_url;
-      console.log("Cloudinary upload successful. File URL:", fileUrl);
+
+      const { public_id, format } = cloudinaryResult;
+      
+      originalName = req.file.originalname;    // e.g. "report.pdf"
+      fileFormat   = format;  
+
+      // fileUrl = cloudinaryResult.secure_url;
+      // console.log("Cloudinary upload successful. File URL:", fileUrl);
+
+      // Build an attachment URL so browsers download with the correct name
+      downloadUrl = cloudinary.url(public_id, {
+        resource_type: "raw",
+        flags:         "attachment",
+        attachment:    encodeURIComponent(originalName),
+        format,
+      });
 
       // Prepare file attachment for email
       fileAttachment = {
-        filename: req.file.originalname, // Keep original filename
+        filename: originalName, // Keep original filename
         content: req.file.buffer, // Attach the file buffer
         contentType: req.file.mimetype, // Maintain original MIME type (e.g., application/pdf)
       };
@@ -109,7 +125,9 @@ exports.addFreeConsultation = async (req, res) => {
       email,
       consultationType,
       story,
-      reportFileUrl: fileUrl, // Store Cloudinary URL if available
+      reportFileUrl: downloadUrl,
+      reportFileName: originalName,
+      reportFileExtension: fileFormat && `.${fileFormat}`,
     });
 
     await freeConsultation.save();
@@ -170,6 +188,7 @@ ${signatureHtml}`,
     console.log("Emails sent successfully.");
     res.status(200).json({
       message: "Free subscription confirmation email sent successfully",
+      fileUrl: downloadUrl,  // return the download link if you want
     });
   } catch (err) {
     console.error("Error sending free subscription email:", err);
