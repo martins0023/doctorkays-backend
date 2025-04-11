@@ -20,7 +20,6 @@ const sendVerificationEmail = async (email, token) => {
 
 Best Regards
 Doctor kays Admin Security Team.`,
-    html: `${signatureHtml}`,
   };
 
   await transporter.sendMail(mailOptions);
