@@ -59,8 +59,8 @@ exports.registerAdmin = async (req, res) => {
   Please contact the security team to request your login link and password details.
   
   Best Regards,
-  Doctor Kays Team
-  ${signatureHtml}`,
+  Doctor Kays Team`,
+      html: `${signatureHtml}`,
     };
 
     // Send the notification email

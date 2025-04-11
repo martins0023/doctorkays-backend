@@ -53,13 +53,13 @@ const signatureHtml = `
                   <p style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
                             font-size:14px;margin:0 0 8px">
                     <span style="display:inline-block;margin-right:12px">
-                      <strong style="color:#ff4d00">E:</strong>
+                      <strong style="color:#ff4d00">Email:</strong>
                       <a href="mailto:support@doctorkays.com" style="text-decoration:none;color:inherit">
                         support@doctorkays.com
                       </a>
                     </span>
                     <span style="display:inline-block">
-                      <strong style="color:#ff4d00">W:</strong>
+                      <strong style="color:#ff4d00">Website:</strong>
                       <a href="https://www.doctorkays.com/" target="_blank" style="text-decoration:none;color:inherit">
                         www.doctorkays.com
                       </a>
@@ -68,12 +68,12 @@ const signatureHtml = `
 
                   <p style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
                             font-size:14px;margin:0 0 8px">
-                    <strong style="color:#ff4d00">P:</strong> +234 813 781 2971
+                    <strong style="color:#ff4d00">Phone:</strong> +234 813 781 2971
                   </p>
 
                   <p style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
                             font-size:14px;margin:0 0 8px;display:flex;align-items:flex-start;">
-                    <strong style="color:#ff4d00; margin-right:4px">A:</strong>
+                    <strong style="color:#ff4d00; margin-right:4px">Address:</strong>
                     <span>36 BEHIND OMIDIRAN GARDENS OSOGBO OSUN STATE</span>
                   </p>
 

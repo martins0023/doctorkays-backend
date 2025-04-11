@@ -19,8 +19,8 @@ const sendVerificationEmail = async (email, token) => {
     text: `Your verification code is: ${token}\n\nIt will expire in 5 minutes. This means that a request has been made to login to the admin interface with your details, if you haven't initiated this kindly contact the security team.
 
 Best Regards
-Doctor kays Admin Security Team.
-${signatureHtml}`,
+Doctor kays Admin Security Team.`,
+    html: `${signatureHtml}`,
   };
 
   await transporter.sendMail(mailOptions);

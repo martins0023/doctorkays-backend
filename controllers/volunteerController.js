@@ -47,8 +47,8 @@ exports.addVolunteers = async (req, res) => {
     Thank you for reaching out to becoming a volunteer with us!
     
     Best Regards,
-    Doctor Kays Team
-    ${signatureHtml}`,
+    Doctor Kays Team`,
+      html: `${signatureHtml}`,
     };
 
     const info = await transporter.sendMail(mailOptions);
