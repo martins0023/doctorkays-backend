@@ -79,31 +79,22 @@ exports.deleteConsultation = async (req, res) => {
 
 exports.addFreeConsultation = async (req, res) => {
   try {
-    console.log("Received request for free subscription:", req.body);
     const { name, email, consultationType, story } = req.body;
-    let downloadUrl = null;
-    let originalName = null;
-    let fileFormat = null;
+
+    let downloadUrl    = null;
+    let originalName   = null;
+    let fileFormat     = null;
     let fileAttachment = null;
 
-    // Check if the consultation type requires a file and if a file was uploaded
+    // 1) If this type requires a file and one was uploaded…
     if (fileRequiredTypes.includes(consultationType) && req.file) {
-      console.log(
-        "File uploaded, proceeding to Cloudinary and email attachment."
-      );
+      const result = await uploadToCloudinary(req.file.buffer);
+      const { public_id, format } = result;
 
-      // Upload to Cloudinary (optional if you want a backup URL)
-      const cloudinaryResult = await uploadToCloudinary(req.file.buffer);
+      originalName = req.file.originalname;  // e.g. "report.pdf"
+      fileFormat   = format;                 // e.g. "pdf"
 
-      const { public_id, format } = cloudinaryResult;
-      
-      originalName = req.file.originalname;    // e.g. "report.pdf"
-      fileFormat   = format;  
-
-      // fileUrl = cloudinaryResult.secure_url;
-      // console.log("Cloudinary upload successful. File URL:", fileUrl);
-
-      // Build an attachment URL so browsers download with the correct name
+      // Build a Cloudinary URL that forces a download with correct name
       downloadUrl = cloudinary.url(public_id, {
         resource_type: "raw",
         flags:         "attachment",
@@ -111,88 +102,78 @@ exports.addFreeConsultation = async (req, res) => {
         format,
       });
 
-      // Prepare file attachment for email
+      // Also prepare inline attachment for the admin email if desired
       fileAttachment = {
-        filename: originalName, // Keep original filename
-        content: req.file.buffer, // Attach the file buffer
-        contentType: req.file.mimetype, // Maintain original MIME type (e.g., application/pdf)
+        filename:    originalName,
+        content:     req.file.buffer,
+        contentType: req.file.mimetype,
       };
     }
 
-    // Save free subscription details in the Consultation database
+    // 2) Save to MongoDB
     const freeConsultation = new Consultation({
       name,
       email,
       consultationType,
       story,
-      reportFileUrl: downloadUrl,
-      reportFileName: originalName,
+      reportFileUrl:       downloadUrl,
+      reportFileName:      originalName,
       reportFileExtension: fileFormat && `.${fileFormat}`,
     });
-
     await freeConsultation.save();
-    console.log("Free consultation record saved successfully.");
 
-    // Set up Nodemailer transporter
+    // 3) Set up Zoho SMTP transport
     const transporter = nodemailer.createTransport({
-      host: "smtp.zoho.com",
-      port: 465,
-      secure: true, // SSL
+      host:   "smtp.zoho.com",
+      port:   465,
+      secure: true,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
     });
 
-    // Email to the registered user
-    const mailOptions = {
-      from: `"KMC HOSPITAL LIMITED." <${process.env.EMAIL_USER}>`,
-      to: email,
+    // 4) Email to the user
+    const userMail = {
+      from:    `"KMC HOSPITAL LIMITED" <${process.env.EMAIL_USER}>`,
+      to:      email,
       subject: "Your Free Subscription is Confirmed!",
-      text: `Hi ${name},
-
-Thank you for subscribing to our ${consultationType} Service.
-
-We have received your subscription and will get back to you within 24hrs.
-
-For Private audio or video consultation, you can subscribe to either our Silver or Gold subscription package.
-
-Best Regards,
-Doctor Kays Team
-${signatureHtml}`,
+      text:    `Hi ${name},\n\nThank you for subscribing to our ${consultationType} Service.\n\nWe’ve received your subscription and will get back to you within 24hrs.\n\nBest Regards,\nDoctor Kays Team`,
+      html:    `<p>Hi ${name},</p>
+                <p>Thank you for subscribing to our <strong>${consultationType}</strong> Service.</p>
+                <p>We’ve received your subscription and will get back to you within 24hrs.</p>
+                ${signatureHtml}`,
     };
 
-    // Email to Dr. Kay's official email (with file attachment if available)
-    const adminMailOptions = {
-      from: `"KMC HOSPITAL LIMITED." <${process.env.EMAIL_USER}>`,
-      to: process.env.EMAIL_TO_FORWARD, // Or use process.env.EMAIL_TO_FORWARD
-      subject: `New ${consultationType} Registered`,
-      text: `A new ${consultationType} has been registered.
-
-Name: ${name}
-Email: ${email}
-Consultation Type: ${consultationType}
-History: ${story}
-
-Please follow up accordingly.
-${signatureHtml}`,
+    // 5) Email to admin (with optional inline attachment)
+    const adminMail = {
+      from:        `"KMC HOSPITAL LIMITED" <${process.env.EMAIL_USER}>`,
+      to:          process.env.EMAIL_TO_FORWARD,
+      subject:     `New ${consultationType} Registered`,
+      text:        `A new ${consultationType} has been registered.\n\nName: ${name}\nEmail: ${email}\nStory: ${story}\n`,
+      html:        `<p>A new <strong>${consultationType}</strong> has been registered.</p>
+                    <ul>
+                      <li><strong>Name:</strong> ${name}</li>
+                      <li><strong>Email:</strong> ${email}</li>
+                      <li><strong>Story:</strong> ${story}</li>
+                    </ul>
+                    ${signatureHtml}`,
       attachments: fileAttachment ? [fileAttachment] : [],
     };
 
-    // Send both emails concurrently
+    // 6) Send both concurrently
     await Promise.all([
-      transporter.sendMail(mailOptions),
-      transporter.sendMail(adminMailOptions),
+      transporter.sendMail(userMail),
+      transporter.sendMail(adminMail),
     ]);
 
-    console.log("Emails sent successfully.");
-    res.status(200).json({
+    return res.status(200).json({
       message: "Free subscription confirmation email sent successfully",
-      fileUrl: downloadUrl,  // return the download link if you want
+      downloadUrl, // handy for the admin UI
     });
   } catch (err) {
-    console.error("Error sending free subscription email:", err);
-    res.status(500).json({ error: "Error sending free subscription email" });
+    console.error("Error in addFreeConsultation:", err);
+    return res.status(500).json({ error: "Error sending free subscription email" });
   }
 };
 
