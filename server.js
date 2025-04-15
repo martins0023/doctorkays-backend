@@ -56,9 +56,9 @@ app.get('/api/questions/:id', async (req, res) => {
     // Replace placeholders
     const pageUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
     html = html
-      .replace(/%PAGE_TITLE%/g, question.title)
-      .replace(/%PAGE_DESC%/g, question.question)
-      .replace(/%PAGE_URL%/g, pageUrl);
+      .replace(/__PAGE_TITLE__/g, question.title)
+      .replace(/__PAGE_DESC__/g, question.question)
+      .replace(/__PAGE_URL__/g, pageUrl);
 
     res.send(html);
   } catch (err) {
