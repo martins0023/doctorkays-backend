@@ -14,7 +14,7 @@ exports.addEnquiry = async (req, res) => {
     const enquiryData = req.body;
     const enquiry = new Enquiry(enquiryData);
     await enquiry.save();
-    res.status(200).json({ message: "Enquiry data saved", sponsor });
+    res.status(200).json({ message: "Enquiry data saved", enquiry });
   } catch (err) {
     console.error("Error saving enquiry:", err);
     res.status(500).json({ error: "Error saving enquiry data" });
