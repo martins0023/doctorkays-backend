@@ -77,98 +77,104 @@ exports.deleteConsultation = async (req, res) => {
   }
 };
 
-exports.addFreeConsultation = async (req, res) => {
-  try {
-    console.log("Received request for free subscription:", req.body);
-    const { name, email, consultationType, story } = req.body;
-    let fileUrl = null;
-    let fileAttachment = null;
+exports.addFreeConsultation = [
+  // First, run the multer middleware to process the file
+  upload.single("reportFile"),
 
-    // Check if the consultation type requires a file and if a file was uploaded
-    if (fileRequiredTypes.includes(consultationType) && req.file) {
-      console.log(
-        "File uploaded, proceeding to Cloudinary and email attachment."
-      );
+  // Then, our asynchronous controller function:
+  async (req, res) => {
+    try {
+      console.log("Received request for free subscription:", req.body);
+      const { name, email, consultationType, story } = req.body;
+      let fileUrl = null;
+      let fileAttachment = null;
 
-      // Upload to Cloudinary (optional if you want a backup URL)
-      const cloudinaryResult = await uploadToCloudinary(req.file.buffer);
-      fileUrl = cloudinaryResult.secure_url;
-      console.log("Cloudinary upload successful. File URL:", fileUrl);
+      // Check if the consultation type requires a file and if a file was uploaded
+      if (fileRequiredTypes.includes(consultationType) && req.file) {
+        console.log(
+          "File uploaded, proceeding to Cloudinary and email attachment."
+        );
 
-      // Prepare file attachment for email
-      fileAttachment = {
-        filename: req.file.originalname, // Keep original filename
-        content: req.file.buffer, // Attach the file buffer
-        contentType: req.file.mimetype, // Maintain original MIME type (e.g., application/pdf)
-      };
-    }
+        // Upload to Cloudinary (optional if you want a backup URL)
+        const cloudinaryResult = await uploadToCloudinary(req.file.buffer);
+        fileUrl = cloudinaryResult.secure_url;
+        console.log("Cloudinary upload successful. File URL:", fileUrl);
 
-    // Save free subscription details in the Consultation database
-    const freeConsultation = new Consultation({
-      name,
-      email,
-      consultationType,
-      story,
-      reportFileUrl: fileUrl, // Store Cloudinary URL if available
-    });
+        // Prepare file attachment for email
+        fileAttachment = {
+          filename: req.file.originalname, // Keep original filename
+          content: req.file.buffer, // Attach the file buffer
+          contentType: req.file.mimetype, // Maintain original MIME type (e.g., application/pdf)
+        };
+      }
 
-    await freeConsultation.save();
-    console.log("Free consultation record saved successfully.");
+      // Save free subscription details in the Consultation database
+      const freeConsultation = new Consultation({
+        name,
+        email,
+        consultationType,
+        story,
+        reportFileUrl: fileUrl, // Store Cloudinary URL if available
+      });
 
-    // Set up Nodemailer transporter
-    const transporter = nodemailer.createTransport({
-      host: "smtp.zoho.com",
-      port: 465,
-      secure: true, // SSL
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
+      await freeConsultation.save();
+      console.log("Free consultation record saved successfully.");
 
-    // Email to the registered user
-    const mailOptions = {
-      from: `"KMC HOSPITAL LIMITED." <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: "Your Free Subscription is Confirmed!",
-      text: `Hi ${name},\n\nThank you for subscribing to our ${consultationType} Service.\n\nWe’ve received your subscription and will get back to you within 24hrs.\n\nBest Regards,\nDoctor Kays Team`,
-      html: `<p>Hi ${name},</p>
-                <p>Thank you for subscribing to our <strong>${consultationType}</strong> Service.</p>
-                <p>We’ve received your subscription and will get back to you within 24hrs. For Private audio or video consultation, you can subscribe to either our Silver or Gold subscription package.</p>
-                ${signatureHtml}`,
-    };
+      // Set up Nodemailer transporter
+      const transporter = nodemailer.createTransport({
+        host: "smtp.zoho.com",
+        port: 465,
+        secure: true, // SSL
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS,
+        },
+      });
 
-    // Email to Dr. Kay's official email (with file attachment if available)
-    const adminMailOptions = {
-      from: `"KMC HOSPITAL LIMITED." <${process.env.EMAIL_USER}>`,
-      to: process.env.EMAIL_TO_FORWARD, // Or use process.env.EMAIL_TO_FORWARD
-      subject: `New ${consultationType} Registered`,
-      text: `A new ${consultationType} has been registered.\n\nName: ${name}\nEmail: ${email}\nStory: ${story}\n`,
-      html: `<p>A new <strong>${consultationType}</strong> has been registered.</p>
-                    <ul>
-                      <li><strong>Name:</strong> ${name}</li>
-                      <li><strong>Email:</strong> ${email}</li>
-                      <li><strong>Story:</strong> ${story}</li>
-                    </ul>
+      // Email to the registered user
+      const mailOptions = {
+        from: `"KMC HOSPITAL LIMITED." <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: "Your Free Subscription is Confirmed!",
+        text: `Hi ${name},\n\nThank you for subscribing to our ${consultationType} Service.\n\nWe’ve received your subscription and will get back to you within 24hrs.\n\nBest Regards,\nDoctor Kays Team`,
+        html: `<p>Hi ${name},</p>
+                    <p>Thank you for subscribing to our <strong>${consultationType}</strong> Service.</p>
+                    <p>We’ve received your subscription and will get back to you within 24hrs. For Private audio or video consultation, you can subscribe to either our Silver or Gold subscription package.</p>
                     ${signatureHtml}`,
-      attachments: fileAttachment ? [fileAttachment] : [],
-    };
+      };
 
-    // Send both emails concurrently
-    await Promise.all([
-      transporter.sendMail(mailOptions),
-      transporter.sendMail(adminMailOptions),
-    ]);
+      // Email to Dr. Kay's official email (with file attachment if available)
+      const adminMailOptions = {
+        from: `"KMC HOSPITAL LIMITED." <${process.env.EMAIL_USER}>`,
+        to: process.env.EMAIL_TO_FORWARD, // Or use process.env.EMAIL_TO_FORWARD
+        subject: `New ${consultationType} Registered`,
+        text: `A new ${consultationType} has been registered.\n\nName: ${name}\nEmail: ${email}\nStory: ${story}\n`,
+        html: `<p>A new <strong>${consultationType}</strong> has been registered.</p>
+                        <ul>
+                          <li><strong>Name:</strong> ${name}</li>
+                          <li><strong>Email:</strong> ${email}</li>
+                          <li><strong>Story:</strong> ${story}</li>
+                        </ul>
+                        ${signatureHtml}`,
+        attachments: fileAttachment ? [fileAttachment] : [],
+      };
 
-    console.log("Emails sent successfully.");
-    res.status(200).json({
-      message: "Free subscription confirmation email sent successfully",
-    });
-  } catch (err) {
-    console.error("Error sending free subscription email:", err);
-    res.status(500).json({ error: "Error sending free subscription email" });
-  }
-};
+      // Send both emails concurrently
+      await Promise.all([
+        transporter.sendMail(mailOptions),
+        transporter.sendMail(adminMailOptions),
+      ]);
+
+      console.log("Emails sent successfully.");
+      res.status(200).json({
+        message: "Free subscription confirmation email sent successfully",
+      });
+    } catch (err) {
+      console.error("Error sending free subscription email:", err);
+      res.status(500).json({ error: "Error sending free subscription email" });
+    }
+  },
+];
 
 exports.consultationConfirmationEmail = async (req, res) => {
   console.log("Received email confirmation request:", req.body);

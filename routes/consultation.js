@@ -18,7 +18,7 @@ router.post('/consultation', consultationController.addConsultation);
 router.delete('/consultations/:id', consultationController.deleteConsultation);
 
 //free-subscription endpoint consultation
-router.post('/free-subscription', upload.single("reportFile"), consultationController.addFreeConsultation);
+router.post('/free-subscription', consultationController.addFreeConsultation);
 
 //send confirmation email to subscriber
 router.post('/sendConfirmationEmail', consultationController.consultationConfirmationEmail);
