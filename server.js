@@ -62,7 +62,7 @@ const uploadToCloudinary = (fileBuffer, originalName) => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       { folder: "consultationReports", 
-        resource_type: "raw",
+        resource_type: "auto",
         access_mode: "public",
         type: "upload",
         public_id: originalName, // Preserve original filename
