@@ -9,6 +9,11 @@ const mongoose = require("mongoose");
 const cloudinary = require('cloudinary').v2;
 const nodemailer = require('nodemailer');
 const multer = require('multer'); // Import multer
+
+const AWS = require('aws-sdk');
+const s3 = new AWS.S3();
+const multerS3 = require('multer-s3');
+
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 
@@ -39,7 +44,7 @@ cloudinary.config({
 
 // Use multer with memory storage so we can send the file to Cloudinary
 const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+// const upload = multer({ storage: storage });
 
 // Connect to MongoDB
 mongoose
@@ -58,27 +63,42 @@ const fileRequiredTypes = [
 ];
 
 // Helper function to upload file to Cloudinary using a stream
-const uploadToCloudinary = (fileBuffer, originalName) => {
-  return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      { folder: "consultationReports", 
-        resource_type: "auto",
-        access_mode: "public",
-        type: "upload",
-        public_id: originalName, // Preserve original filename
-        overwrite: false, // Prevent duplicate overwrites
-        use_filename: true, // Use original filename
-        unique_filename: false,
-        filename_override: originalName // Force filename
+// const uploadToCloudinary = (fileBuffer, originalName) => {
+//   return new Promise((resolve, reject) => {
+//     const stream = cloudinary.uploader.upload_stream(
+//       { folder: "consultationReports", 
+//         resource_type: "auto",
+//         access_mode: "public",
+//         // type: "upload",
+//         public_id: originalName, // Preserve original filename
+//         overwrite: false, // Prevent duplicate overwrites
+//         use_filename: true, // Use original filename
+//         unique_filename: false,
+//         filename_override: originalName, // Force filename
+//         sign_url: true
+//     },
+//       (error, result) => {
+//         if (result) resolve(result);
+//         else reject(error);
+//       }
+//     );
+//     stream.end(fileBuffer);
+//   });
+// };
+
+// Multer storage engine for S3
+const upload = multer({
+  storage: multerS3({
+    s3,
+    bucket: process.env.AWS_S3_BUCKET_NAME, // e.g. 'kmc-uploads'
+    acl: "public-read", // files are publicly readable
+    key: (req, file, cb) => {
+      // Use timestamp + original name to avoid collisions
+      const uniqueName = `${Date.now()}_${file.originalname}`;
+      cb(null, uniqueName);
     },
-      (error, result) => {
-        if (result) resolve(result);
-        else reject(error);
-      }
-    );
-    stream.end(fileBuffer);
-  });
-};
+  }),
+});
 
 // Use the routes with proper prefixes
 app.use('/api/enquiry', enquiryRoutes);
@@ -132,22 +152,28 @@ app.delete('/api/consultations/:id', async (req, res) => {
   }
 });
 
-
 app.post("/api/free-subscription", upload.single("reportFile"), async (req, res) => {
   try {
     console.log("Received request for free subscription:", req.body);
     const { name, email, consultationType, story } = req.body;
-    let fileUrl = null;
+    
+    //let fileUrl = null;
     let fileAttachment = null;
 
     // Check if the consultation type requires a file and if a file was uploaded
-    if (fileRequiredTypes.includes(consultationType) && req.file) {
-      console.log("File uploaded, proceeding to Cloudinary and email attachment.");
+    // if (fileRequiredTypes.includes(consultationType) && req.file) {
+    //   console.log("File uploaded, proceeding to Cloudinary and email attachment.");
       
-      // Upload to Cloudinary (optional if you still want a backup URL)
-      const cloudinaryResult = await uploadToCloudinary(req.file.buffer, req.file.originalname);
-      fileUrl = cloudinaryResult.secure_url;
-      console.log("Cloudinary upload successful. File URL:", fileUrl);
+    //   // Upload to Cloudinary (optional if you still want a backup URL)
+    //   const cloudinaryResult = await uploadToCloudinary(req.file.buffer, req.file.originalname);
+    //   fileUrl = cloudinaryResult.secure_url;
+    //   console.log("Cloudinary upload successful. File URL:", fileUrl);
+
+     // S3 gives us the public URL right on req.file.location
+   const fileUrl =
+     fileRequiredTypes.includes(consultationType) && req.file
+       ? req.file.location
+       : null;
 
       // Prepare file attachment for email
       fileAttachment = {
@@ -155,7 +181,7 @@ app.post("/api/free-subscription", upload.single("reportFile"), async (req, res)
         content: req.file.buffer,         // Attach the file buffer
         contentType: req.file.mimetype,   // Maintain original MIME type (e.g., application/pdf)
       };
-    }
+    // }
 
     // Save free subscription details in the Consultation database
     const freeConsultation = new Consultation({
