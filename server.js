@@ -4,7 +4,13 @@ const express = require("express");
 const cors = require("cors");
 const path = require('path');
 const fs = require('fs');
+const crypto = require("crypto");
 const mongoose = require("mongoose");
+const cloudinary = require('cloudinary').v2;
+const nodemailer = require('nodemailer');
+const multer = require('multer'); // Import multer
+const jwt = require('jsonwebtoken');
+const axios = require('axios');
 
 //models
 const Question = require('./models/Question');
@@ -12,7 +18,7 @@ const Question = require('./models/Question');
 // Import routes
 const questionsRoutes = require('./routes/questions');
 const adminRoutes = require('./routes/admin');
-const consultationRoutes = require('./routes/consultation');
+// const consultationRoutes = require('./routes/consultation');
 const contactRoutes = require('./routes/contact');
 const volunteerRoutes = require('./routes/volunteer');
 const sponsorRoutes = require('./routes/sponsor');
@@ -23,9 +29,18 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,   
+  api_key: process.env.CLOUDINARY_API_KEY,          // your api key
+  api_secret: process.env.CLOUDINARY_API_SECRET       // your api secret
+});
+
+// Use multer with memory storage so we can send the file to Cloudinary
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
 // Connect to MongoDB
-
 mongoose
   .connect(process.env.MONGOURI, {
     useNewUrlParser: true,
@@ -34,11 +49,36 @@ mongoose
   .then(() => console.log("MongoDB connected"))
   .catch((err) => console.error("MongoDB connection error:", err));
 
+// Define required file types for which file upload is necessary
+const fileRequiredTypes = [
+  "Blood Tests",
+  "Scan Reports",
+  "Blood Tests and Scan Report",
+];
+
+// Helper function to upload file to Cloudinary using a stream
+const uploadToCloudinary = (fileBuffer) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: "consultationReports", 
+        resource_type: "raw",
+        access_mode: "public",
+        type: "upload",
+    },
+      (error, result) => {
+        if (result) resolve(result);
+        else reject(error);
+      }
+    );
+    stream.end(fileBuffer);
+  });
+};
+
 // Use the routes with proper prefixes
 app.use('/api/enquiry', enquiryRoutes);
 app.use('/api/questions', questionsRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api', consultationRoutes);
+// app.use('/api', consultationRoutes);
 app.use('/api', contactRoutes);
 app.use('/api', volunteerRoutes);
 app.use('/api', sponsorRoutes);
@@ -47,8 +87,10 @@ app.use('/api', sponsorRoutes);
 const buildPath = path.join(__dirname, 'client', 'build');
 app.use(express.static(buildPath));
 
+
+//TEMPORARY ENDPOINT
 //get consultation data
-app.get('/api/consultations/test', async (req, res) => {
+app.get('/api/consultations', async (req, res) => {
   try {
     const consultation = await Consultation.find().sort({ createdAt: -1 });
     res.json(consultation);
@@ -56,6 +98,137 @@ app.get('/api/consultations/test', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Endpoint for consultation details
+app.post('/api/consultation', async (req, res) => {
+  try {
+    const consultationData = req.body;
+    const consultation = new Consultation(consultationData);
+    await consultation.save();
+    res.status(200).json({ message: "Consultation data saved", consultation });
+  } catch (err) {
+    console.error("Error saving consultation:", err);
+    res.status(500).json({ error: "Error saving consultation data" });
+  }
+});
+
+// DELETE consultation by ID
+app.delete('/api/consultations/:id', async (req, res) => {
+  try {
+    const consultation = await Consultation.findByIdAndDelete(req.params.id);
+    if (!consultation) {
+      return res.status(404).json({ error: "Consultation not found" });
+    }
+    res.json({ message: "Consultation deleted successfully", consultation });
+  } catch (err) {
+    console.error("Error deleting consultation:", err);
+    res.status(500).json({ error: "Error deleting consultation" });
+  }
+});
+
+
+app.post("/api/free-subscription", upload.single("reportFile"), async (req, res) => {
+  try {
+    console.log("Received request for free subscription:", req.body);
+    const { name, email, consultationType, story } = req.body;
+    let fileUrl = null;
+    let fileAttachment = null;
+
+    // Check if the consultation type requires a file and if a file was uploaded
+    if (fileRequiredTypes.includes(consultationType) && req.file) {
+      console.log("File uploaded, proceeding to Cloudinary and email attachment.");
+      
+      // Upload to Cloudinary (optional if you still want a backup URL)
+      const cloudinaryResult = await uploadToCloudinary(req.file.buffer);
+      fileUrl = cloudinaryResult.secure_url;
+      console.log("Cloudinary upload successful. File URL:", fileUrl);
+
+      // Prepare file attachment for email
+      fileAttachment = {
+        filename: req.file.originalname,  // Keep original filename
+        content: req.file.buffer,         // Attach the file buffer
+        contentType: req.file.mimetype,   // Maintain original MIME type (e.g., application/pdf)
+      };
+    }
+
+    // Save free subscription details in the Consultation database
+    const freeConsultation = new Consultation({
+      name,
+      email,
+      consultationType,
+      story,
+      reportFileUrl: fileUrl, // Store Cloudinary URL if available
+    });
+
+    await freeConsultation.save();
+    console.log("Free consultation record saved successfully.");
+
+    // Set up Nodemailer transporter 
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    // Email to the registered user
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "Your Free Subscription is Confirmed!",
+      text: `Hi ${name},
+
+Thank you for subscribing to our ${consultationType} Service.
+
+We have received your subscription and will get back to you within 24hrs.
+
+For Private audio or video consultation, you can subscribe to either our Silver or Gold subscription package.
+
+Best Regards,
+Doctor Kays Team`,
+    };
+
+    // Email to Dr. Kay's official email (with file attachment)
+    const adminMailOptions = {
+      from: process.env.EMAIL_USER,
+      to: process.env.EMAIL_TO_FORWARD,
+      subject: `New ${consultationType} Registered`,
+      text: `A new ${consultationType} has been registered.
+
+Name: ${name}
+Email: ${email}
+Consultation Type: ${consultationType}
+History: ${story}
+
+Please follow up accordingly.`,
+      attachments: fileAttachment ? [fileAttachment] : [], // Attach the file if available
+    };
+
+    // Send both emails concurrently
+    await Promise.all([
+      transporter.sendMail(mailOptions),
+      transporter.sendMail(adminMailOptions),
+    ]);
+
+    console.log("Emails sent successfully.");
+    res.status(200).json({ message: "Free subscription confirmation email sent successfully" });
+  } catch (err) {
+    console.error("Error sending free subscription email:", err);
+    res.status(500).json({ error: "Error sending free subscription email" });
+  }
+});
+//get consultation data
+// app.get('/api/consultations/test', async (req, res) => {
+//   try {
+//     const consultation = await Consultation.find().sort({ createdAt: -1 });
+//     res.json(consultation);
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
+
 
 // 3) Dynamic meta for question pages
 app.get('/api/questions/:id', async (req, res) => {
