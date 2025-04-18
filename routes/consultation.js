@@ -15,7 +15,7 @@ router.get('/consultations', consultationController.getConsultation);
 router.post('/consultation', consultationController.addConsultation);
 
 // DELETE consultation by ID
-router.delete('/consultations/:id', adminAuth, consultationController.deleteConsultation);
+router.delete('/consultations/:id', consultationController.deleteConsultation);
 
 //free-subscription endpoint consultation
 router.post('/free-subscription', upload.single("reportFile"), consultationController.addFreeConsultation);
