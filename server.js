@@ -34,7 +34,7 @@ mongoose
   .catch((err) => console.error("MongoDB connection error:", err));
 
 // Use the routes with proper prefixes
-app.use('/api', enquiryRoutes);
+app.use('/api/enquiry', enquiryRoutes);
 app.use('/api/questions', questionsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', consultationRoutes);
