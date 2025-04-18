@@ -17,6 +17,7 @@ const contactRoutes = require('./routes/contact');
 const volunteerRoutes = require('./routes/volunteer');
 const sponsorRoutes = require('./routes/sponsor');
 const enquiryRoutes = require('./routes/enquirycommerce');
+const Consultation = require("./models/Consultation");
 
 const app = express();
 app.use(cors());
@@ -45,6 +46,16 @@ app.use('/api', sponsorRoutes);
 // 2) Serve React build statically
 const buildPath = path.join(__dirname, 'client', 'build');
 app.use(express.static(buildPath));
+
+//get consultation data
+app.get('/api/consultations/test', async (req, res) => {
+  try {
+    const consultation = await Consultation.find().sort({ createdAt: -1 });
+    res.json(consultation);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // 3) Dynamic meta for question pages
 app.get('/api/questions/:id', async (req, res) => {
