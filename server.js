@@ -58,13 +58,18 @@ const fileRequiredTypes = [
 ];
 
 // Helper function to upload file to Cloudinary using a stream
-const uploadToCloudinary = (fileBuffer) => {
+const uploadToCloudinary = (fileBuffer, originalName) => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       { folder: "consultationReports", 
         resource_type: "raw",
         access_mode: "public",
         type: "upload",
+        public_id: originalName, // Preserve original filename
+        overwrite: false, // Prevent duplicate overwrites
+        use_filename: true, // Use original filename
+        unique_filename: false,
+        filename_override: originalName // Force filename
     },
       (error, result) => {
         if (result) resolve(result);
@@ -140,7 +145,7 @@ app.post("/api/free-subscription", upload.single("reportFile"), async (req, res)
       console.log("File uploaded, proceeding to Cloudinary and email attachment.");
       
       // Upload to Cloudinary (optional if you still want a backup URL)
-      const cloudinaryResult = await uploadToCloudinary(req.file.buffer);
+      const cloudinaryResult = await uploadToCloudinary(req.file.buffer, req.file.originalname);
       fileUrl = cloudinaryResult.secure_url;
       console.log("Cloudinary upload successful. File URL:", fileUrl);
 
