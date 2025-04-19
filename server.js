@@ -111,13 +111,18 @@ const uploadToCloudinary = (fileBuffer, originalName) => {
 };
 
 // Generate a signed download URL with the attachment flag transformation
-const getDownloadUrl = (publicId, resourceType = "image") => {
+const getDownloadUrl = (publicId, resourceType = "raw", customFilename = null) => {
   // This transformation appends 'fl_attachment' so that the header is set properly.
   // If you want a custom download filename, use: transformation: [{ flags: "attachment:my_custom_filename" }]
+  const transformation = bloodTestScan
+    ? [{ flags: `attachment:${bloodTestScan}` }]
+    : [{ flags: "attachment" }];
+
   return cloudinary.url(publicId, {
     resource_type: resourceType,  
     sign_url: true, 
-    transformation: [{ flags: "attachment" }],
+    // transformation: [{ flags: "attachment" }],
+    transformation: transformation,
     secure: true
   });
 };
@@ -199,7 +204,7 @@ app.post("/api/free-subscription", upload.single("reportFile"), async (req, res)
 
     // Check if the consultation type requires a file and if a file was uploaded
     if (fileRequiredTypes.includes(consultationType) && req.file) {
-      console.log("File uploaded, proceeding to Cloudinary and email attachment.");
+      console.log("File uploaded, processing upload to Cloudinary.");
       
       // Upload to Cloudinary (optional if you still want a backup URL)
       const cloudinaryResult = await uploadToCloudinary(req.file.buffer, req.file.originalname);
