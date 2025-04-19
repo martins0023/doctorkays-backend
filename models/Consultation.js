@@ -9,6 +9,7 @@ const consultationSchema = new mongoose.Schema({
     price: String,
     story: String,
     reportFileUrl: String, // New field to store Cloudinary URL
+    downloadUrl: String,
     createdAt: { type: Date, default: Date.now },
   });
   
