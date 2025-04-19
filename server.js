@@ -114,8 +114,8 @@ const uploadToCloudinary = (fileBuffer, originalName) => {
 const getDownloadUrl = (publicId, resourceType = "raw", customFilename = null) => {
   // This transformation appends 'fl_attachment' so that the header is set properly.
   // If you want a custom download filename, use: transformation: [{ flags: "attachment:my_custom_filename" }]
-  const transformation = bloodTestScan
-    ? [{ flags: `attachment:${bloodTestScan}` }]
+  const transformation = customFilename
+    ? [{ flags: `attachment:${customFilename}` }]
     : [{ flags: "attachment" }];
 
   return cloudinary.url(publicId, {
