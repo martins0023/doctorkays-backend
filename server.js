@@ -10,9 +10,9 @@ const cloudinary = require('cloudinary').v2;
 const nodemailer = require('nodemailer');
 const multer = require('multer'); // Import multer
 
-const AWS = require('aws-sdk');
-const s3 = new AWS.S3();
-const multerS3 = require('multer-s3');
+// const AWS = require('aws-sdk');
+// const s3 = new AWS.S3();
+// const multerS3 = require('multer-s3');
 
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
@@ -44,7 +44,7 @@ cloudinary.config({
 
 // Use multer with memory storage so we can send the file to Cloudinary
 const storage = multer.memoryStorage();
-// const upload = multer({ storage: storage });
+const upload = multer({ storage: storage });
 
 // Connect to MongoDB
 mongoose
@@ -86,19 +86,55 @@ const fileRequiredTypes = [
 //   });
 // };
 
+// Upload file buffer to Cloudinary
+const uploadToCloudinary = (fileBuffer, originalName) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { 
+        folder: "consultationReports", 
+        resource_type: "auto",         // Supports images, PDFs, etc.
+        access_mode: "public",         // Change if you’re using authenticated mode
+        public_id: originalName,       // Preserve (or use a safe unique version) the original filename
+        overwrite: false,              // Prevent overwriting duplicates
+        use_filename: true,
+        unique_filename: false,
+        filename_override: originalName,
+        sign_url: true                 // Generate a signed URL for authenticated assets
+      },
+      (error, result) => {
+        if (error) return reject(error);
+        return resolve(result);
+      }
+    );
+    stream.end(fileBuffer);
+  });
+};
+
+// Generate a signed download URL with the attachment flag transformation
+const getDownloadUrl = (publicId, resourceType = "image") => {
+  // This transformation appends 'fl_attachment' so that the header is set properly.
+  // If you want a custom download filename, use: transformation: [{ flags: "attachment:my_custom_filename" }]
+  return cloudinary.url(publicId, {
+    resource_type: resourceType,  
+    sign_url: true, 
+    transformation: [{ flags: "attachment" }],
+    secure: true
+  });
+};
+
 // Multer storage engine for S3
-const upload = multer({
-  storage: multerS3({
-    s3,
-    bucket: process.env.AWS_S3_BUCKET_NAME, // e.g. 'kmc-uploads'
-    acl: "public-read", // files are publicly readable
-    key: (req, file, cb) => {
-      // Use timestamp + original name to avoid collisions
-      const uniqueName = `${Date.now()}_${file.originalname}`;
-      cb(null, uniqueName);
-    },
-  }),
-});
+// const upload = multer({
+//   storage: multerS3({
+//     s3,
+//     bucket: process.env.AWS_S3_BUCKET_NAME, // e.g. 'kmc-uploads'
+//     acl: "public-read", // files are publicly readable
+//     key: (req, file, cb) => {
+//       // Use timestamp + original name to avoid collisions
+//       const uniqueName = `${Date.now()}_${file.originalname}`;
+//       cb(null, uniqueName);
+//     },
+//   }),
+// });
 
 // Use the routes with proper prefixes
 app.use('/api/enquiry', enquiryRoutes);
@@ -157,23 +193,21 @@ app.post("/api/free-subscription", upload.single("reportFile"), async (req, res)
     console.log("Received request for free subscription:", req.body);
     const { name, email, consultationType, story } = req.body;
     
-    //let fileUrl = null;
+    let downloadUrl = null;
+    let fileUrl = null;
     let fileAttachment = null;
 
     // Check if the consultation type requires a file and if a file was uploaded
-    // if (fileRequiredTypes.includes(consultationType) && req.file) {
-    //   console.log("File uploaded, proceeding to Cloudinary and email attachment.");
+    if (fileRequiredTypes.includes(consultationType) && req.file) {
+      console.log("File uploaded, proceeding to Cloudinary and email attachment.");
       
-    //   // Upload to Cloudinary (optional if you still want a backup URL)
-    //   const cloudinaryResult = await uploadToCloudinary(req.file.buffer, req.file.originalname);
-    //   fileUrl = cloudinaryResult.secure_url;
-    //   console.log("Cloudinary upload successful. File URL:", fileUrl);
+      // Upload to Cloudinary (optional if you still want a backup URL)
+      const cloudinaryResult = await uploadToCloudinary(req.file.buffer, req.file.originalname);
+      fileUrl = cloudinaryResult.secure_url;
+      console.log("Cloudinary upload successful. File URL:", fileUrl);
 
-     // S3 gives us the public URL right on req.file.location
-   const fileUrl =
-     fileRequiredTypes.includes(consultationType) && req.file
-       ? req.file.location
-       : null;
+      downloadUrl = getDownloadUrl(cloudinaryResult.public_id, cloudinaryResult.resource_type);
+      console.log("Generated Download URL:", downloadUrl);
 
       // Prepare file attachment for email
       fileAttachment = {
@@ -181,7 +215,7 @@ app.post("/api/free-subscription", upload.single("reportFile"), async (req, res)
         content: req.file.buffer,         // Attach the file buffer
         contentType: req.file.mimetype,   // Maintain original MIME type (e.g., application/pdf)
       };
-    // }
+    }
 
     // Save free subscription details in the Consultation database
     const freeConsultation = new Consultation({
@@ -190,6 +224,7 @@ app.post("/api/free-subscription", upload.single("reportFile"), async (req, res)
       consultationType,
       story,
       reportFileUrl: fileUrl, // Store Cloudinary URL if available
+      downloadUrl: downloadUrl,  // New download URL with fl_attachment flag
     });
 
     await freeConsultation.save();
