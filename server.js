@@ -29,6 +29,8 @@ const volunteerRoutes = require("./routes/volunteer");
 const sponsorRoutes = require("./routes/sponsor");
 const enquiryRoutes = require("./routes/enquirycommerce");
 const consultationRoutes = require('./routes/consultationRoutes');
+const feedbackRoutes = require('./routes/feedback');
+
 const Consultation = require("./models/Consultation");
 const { signatureHtml } = require("./utils/signature");
 
@@ -155,7 +157,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api", contactRoutes);
 app.use("/api", volunteerRoutes);
 app.use("/api", sponsorRoutes);
-
+app.use("/api/feedback", feedbackRoutes);
 // Mount routes under a common API path.
 app.use('/api/v1', consultationRoutes);
 
