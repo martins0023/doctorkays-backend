@@ -4,11 +4,12 @@ const axios = require("axios"); // npm install axios
 const Consultation = require("../models/Consultation");
 const router = express.Router();
 
-const MODEL = "gemini-2.5-flash-preview-04-17" || "text-bison@001"; // e.g. "gemini-pro@001"
+const MODEL = "gemini-2.5-pro-preview-05-06" || "text-bison@001"; // e.g. "gemini-pro@001"
 const API_KEY = process.env.GENERATIVE_API_KEY; // set this in your env
 
 router.post("/api/ai-analysis", async (req, res) => {
   try {
+    console.log("→ AI-analysis request body:", req.body);
     const { fileUrl, userName, userStory } = req.body;
     if (!fileUrl || !userName || !userStory) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -55,8 +56,15 @@ Next Steps & Recommendations:
         .json({ error: "AI generation failed", details: aiResponse.data });
     }
 
+    console.log("→ AI Studio response:", aiResponse.data);
+
     // 4) Extract the raw output
     const candidates = aiResponse.data.candidates || [];
+    if (!Array.isArray(candidates) || !candidates.length) {
+        return res
+          .status(502)
+          .json({ error: "No candidates returned", raw: aiResponse.data });
+      }
     const raw = candidates[0]?.output || "";
 
     // 5) Split into sections by headings
