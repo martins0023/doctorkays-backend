@@ -30,6 +30,7 @@ const sponsorRoutes = require("./routes/sponsor");
 const enquiryRoutes = require("./routes/enquirycommerce");
 const consultationRoutes = require('./routes/consultationRoutes');
 const feedbackRoutes = require('./routes/feedback');
+const aiRoutes = require("./routes/aiAnalysis");
 
 const Consultation = require("./models/Consultation");
 const { signatureHtml } = require("./utils/signature");
@@ -162,6 +163,7 @@ app.use("/api", sponsorRoutes);
 app.use("/api/feedback", feedbackRoutes);
 // Mount routes under a common API path.
 app.use('/api/v1', consultationRoutes);
+app.use(aiRoutes)
 
 
 // 2) Serve React build statically
