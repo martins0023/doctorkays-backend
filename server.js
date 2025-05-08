@@ -63,6 +63,8 @@ const fileRequiredTypes = [
   "Blood Tests",
   "Scan Reports",
   "Blood Tests and Scan Report",
+  "ai",
+  "human",
 ];
 
 // Helper function to upload file to Cloudinary using a stream
