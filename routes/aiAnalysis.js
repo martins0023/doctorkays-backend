@@ -1,10 +1,11 @@
 // File: routes/aiAnalysis.js
 const express = require("express");
-const axios = require("axios");               // npm install axios
+const axios = require("axios"); // npm install axios
+const Consultation = require("../models/Consultation");
 const router = express.Router();
 
-const MODEL = "gemini-2.5-flash-preview-04-17" || "text-bison@001";  // e.g. "gemini-pro@001"
-const API_KEY = process.env.GENERATIVE_API_KEY;                     // set this in your env
+const MODEL = "gemini-2.5-flash-preview-04-17" || "text-bison@001"; // e.g. "gemini-pro@001"
+const API_KEY = process.env.GENERATIVE_API_KEY; // set this in your env
 
 router.post("/api/ai-analysis", async (req, res) => {
   try {
@@ -75,6 +76,21 @@ Next Steps & Recommendations:
     return res
       .status(500)
       .json({ error: "AI analysis failed", details: e.message });
+  }
+});
+
+// → NEW: GET /api/consultation/:id
+router.get("/api/consultation/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const consultation = await Consultation.findById(id);
+    if (!consultation) {
+      return res.status(404).json({ error: "Consultation not found" });
+    }
+    res.json({ consultation });
+  } catch (err) {
+    console.error("Error fetching consultation:", err);
+    res.status(500).json({ error: "Error fetching consultation" });
   }
 });
 
