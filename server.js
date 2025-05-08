@@ -309,6 +309,7 @@ app.post(
         .status(200)
         .json({
           message: "Free subscription confirmation email sent successfully",
+          consultation: freeConsultation
         });
     } catch (err) {
       console.error("Error sending free subscription email:", err);
