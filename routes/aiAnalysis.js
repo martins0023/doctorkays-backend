@@ -4,7 +4,7 @@ const axios = require("axios"); // npm install axios
 const Consultation = require("../models/Consultation");
 const router = express.Router();
 
-const MODEL = "text-bison@001"; // e.g. "gemini-pro@001"
+const MODEL = process.env.MODEL; // e.g. "gemini-pro@001"
 const API_KEY = process.env.GENERATIVE_API_KEY; // set this in your env
 
 router.post("/api/ai-analysis", async (req, res) => {
