@@ -4,7 +4,7 @@ const { GoogleGenAI } = require("@google/genai");
 const Consultation = require("../models/Consultation");
 const router = express.Router();
 
-const MODEL = process.env.MODEL || "models/gemini-2.5-flash-preview-04-17"; 
+const MODEL = process.env.MODEL || "gemini-2.5-flash-preview-04-17"; 
 const API_KEY = process.env.GENERATIVE_API_KEY;
 if (!API_KEY) {
   console.warn(
