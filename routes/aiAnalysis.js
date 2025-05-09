@@ -50,16 +50,25 @@ Next Steps & Recommendations:
     });
 
     console.log("→ SDK raw response:", response);
-    const c = response.candidates?.[0]?.content;
+    // const c = response.candidates?.[0]?.content;
     // console.log("→ content keys:", Object.keys(c));
-    console.log("→ received content:", c);
+    // console.log("→ received content:", c);
 
-    // 1) Extract the raw text safely
-    let raw;
-    if (typeof c === "string") {
-      raw = c;
-    } else {
-      raw = c.text ?? c.output ?? "";
+    // 3) Extract the raw text, handling the SDK’s `content.parts` array
+    const c = response.candidates?.[0]?.content;
+    let raw = "";
+
+    if (c) {
+      if (Array.isArray(c.parts)) {
+        // Join all the text parts
+        raw = c.parts.map((p) => p.text || "").join("");
+      } else if (typeof c === "string") {
+        raw = c;
+      } else if (typeof c.text === "string") {
+        raw = c.text;
+      } else if (typeof c.output === "string") {
+        raw = c.output;
+      }
     }
 
     console.log("→ final raw text:", raw);
