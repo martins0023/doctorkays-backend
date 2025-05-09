@@ -34,7 +34,7 @@ Next Steps & Recommendations:
 `;
 
     // 2) Call the AI Studio REST API via axios
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta2/models/${MODEL}:generateText?key=${API_KEY}`;
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta2/models/${MODEL}:generateContent?key=${API_KEY}`;
     const aiResponse = await axios.post(
       apiUrl,
       {
