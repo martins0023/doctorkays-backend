@@ -49,20 +49,17 @@ Next Steps & Recommendations:
       maxOutputTokens: 1024,
     });
 
-    console.log("→ AI Studio SDK response:", response);
-    console.log("→ raw content object:", response.candidates[0].content);
+    console.log("→ SDK raw response:", response);
+    const c = response.candidates?.[0]?.content;
+    console.log("→ content keys:", Object.keys(c));
+    console.log("→ content value:", c);
 
-    // 3) Extract the raw text
-    let raw;
-    const c = response.candidates[0].content;
-    if (typeof c === "string") {
-      raw = c;
-    } else if (typeof c.text === "string") {
-      raw = c.text;
-    } else if (typeof c.output === "string") {
-      raw = c.output;
-    } else {
-      throw new Error("Unexpected content shape");
+    // Extract the actual text property (adjust to your SDK’s shape):
+    //   e.g. if c looks like { text: "..." }:
+    const raw = c.text ?? c.output ?? (typeof c === "string" ? c : "");
+
+    if (!raw) {
+      throw new Error("AI returned no text");
     }
 
     // 4) Split into named sections
