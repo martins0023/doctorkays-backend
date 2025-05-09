@@ -4,7 +4,7 @@ const { GoogleGenAI } = require("@google/genai");
 const Consultation = require("../models/Consultation");
 const router = express.Router();
 
-const MODEL = process.env.MODEL || "gemini-2.5-flash-preview-04-17"; 
+const MODEL = process.env.MODEL || "gemini-2.5-flash-preview-04-17";
 const API_KEY = process.env.GENERATIVE_API_KEY;
 if (!API_KEY) {
   console.warn(
@@ -50,13 +50,19 @@ Next Steps & Recommendations:
     });
 
     console.log("→ AI Studio SDK response:", response);
+    console.log("→ raw content object:", response.candidates[0].content);
 
     // 3) Extract the raw text
-    const raw = response.text || "";
-    if (!raw) {
-      return res
-        .status(502)
-        .json({ error: "Empty response from AI model", details: response });
+    let raw;
+    const c = response.candidates[0].content;
+    if (typeof c === "string") {
+      raw = c;
+    } else if (typeof c.text === "string") {
+      raw = c.text;
+    } else if (typeof c.output === "string") {
+      raw = c.output;
+    } else {
+      throw new Error("Unexpected content shape");
     }
 
     // 4) Split into named sections
