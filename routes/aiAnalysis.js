@@ -1,11 +1,18 @@
 // File: routes/aiAnalysis.js
 const express = require("express");
-const axios = require("axios"); // npm install axios
+const { GoogleGenAI } = require("@google/genai");
 const Consultation = require("../models/Consultation");
 const router = express.Router();
 
-const MODEL = process.env.MODEL; // e.g. "gemini-pro@001"
-const API_KEY = process.env.GENERATIVE_API_KEY; // set this in your env
+const MODEL = process.env.MODEL || "gemini-2.5-flash-preview-04-17"; 
+const API_KEY = process.env.GENERATIVE_API_KEY;
+if (!API_KEY) {
+  console.warn(
+    "⚠️  No GENERATIVE_API_KEY found in env — AI analysis will not work!"
+  );
+}
+
+const ai = new GoogleGenAI({ apiKey: API_KEY });
 
 router.post("/api/ai-analysis", async (req, res) => {
   try {
@@ -15,7 +22,7 @@ router.post("/api/ai-analysis", async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // 1) Build your prompt text
+    // 1) Build the prompt
     const prompt = `
 You are a healthcare AI assistant.  User ${userName} says:
 "${userStory}"
@@ -33,65 +40,49 @@ Conclusion:
 Next Steps & Recommendations:
 `;
 
-    // 2) Call the AI Studio REST API via axios
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta2/models/${MODEL}:generateText?key=${API_KEY}`;
-    const aiResponse = await axios.post(
-      apiUrl,
-      {
-        prompt: { text: prompt },
-        temperature: 0.2,
-        maxOutputTokens: 1024,
-      },
-      {
-        headers: { "Content-Type": "application/json" },
-        timeout: 30000, // 30s timeout
-      }
-    );
+    // 2) Call the Gem-ini model via the @google/genai SDK
+    const response = await ai.models.generateContent({
+      model: MODEL,
+      contents: prompt,
+      // you can optionally pass these in a `parameters` object if supported:
+      temperature: 0.2,
+      maxOutputTokens: 1024,
+    });
 
-    // 3) Handle non-200
-    if (aiResponse.status !== 200) {
-      console.error("AI Studio error:", aiResponse.data);
+    console.log("→ AI Studio SDK response:", response);
+
+    // 3) Extract the raw text
+    const raw = response.text || "";
+    if (!raw) {
       return res
         .status(502)
-        .json({ error: "AI generation failed", details: aiResponse.data });
+        .json({ error: "Empty response from AI model", details: response });
     }
 
-    console.log("→ AI Studio response:", aiResponse.data);
-
-    // 4) Extract the raw output
-    const candidates = aiResponse.data.candidates || [];
-    if (!Array.isArray(candidates) || !candidates.length) {
-        return res
-          .status(502)
-          .json({ error: "No candidates returned", raw: aiResponse.data });
-      }
-    const raw = candidates[0]?.output || "";
-
-    // 5) Split into sections by headings
+    // 4) Split into named sections
     const analysis = {};
-    const sections = raw.split(/\n(?=[A-Z][^:\n]+:)/g);
-    sections.forEach((block) => {
+    raw.split(/\n(?=[A-Z][^:\n]+:)/g).forEach((block) => {
       const [title, ...rest] = block.split(":");
       const key = title.trim();
       const body = rest.join(":").trim();
       if (body) analysis[key] = body;
     });
 
-    // 6) Return structured analysis
+    // 5) Return structured analysis
     return res.json({ analysis, raw });
   } catch (e) {
     console.error("AI analysis failed:", e);
-    return res
-      .status(500)
-      .json({ error: "AI analysis failed", details: e.message });
+    return res.status(500).json({
+      error: "AI analysis failed",
+      details: e.message || e,
+    });
   }
 });
 
-// → NEW: GET /api/consultation/:id
+// GET consultation by ID (unchanged)
 router.get("/api/consultation/:id", async (req, res) => {
   try {
-    const { id } = req.params;
-    const consultation = await Consultation.findById(id);
+    const consultation = await Consultation.findById(req.params.id);
     if (!consultation) {
       return res.status(404).json({ error: "Consultation not found" });
     }
