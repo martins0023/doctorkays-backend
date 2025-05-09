@@ -51,12 +51,18 @@ Next Steps & Recommendations:
 
     console.log("→ SDK raw response:", response);
     const c = response.candidates?.[0]?.content;
-    console.log("→ content keys:", Object.keys(c));
-    console.log("→ content value:", c);
+    // console.log("→ content keys:", Object.keys(c));
+    console.log("→ received content:", c);
 
-    // Extract the actual text property (adjust to your SDK’s shape):
-    //   e.g. if c looks like { text: "..." }:
-    const raw = c.text ?? c.output ?? (typeof c === "string" ? c : "");
+    // 1) Extract the raw text safely
+    let raw;
+    if (typeof c === "string") {
+      raw = c;
+    } else {
+      raw = c.text ?? c.output ?? "";
+    }
+
+    console.log("→ final raw text:", raw);
 
     if (!raw) {
       throw new Error("AI returned no text");
