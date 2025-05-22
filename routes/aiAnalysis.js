@@ -6,6 +6,7 @@ const { HfInference } = require("@huggingface/inference");
 // const { GoogleGenAI } = require("@google/genai");
 const Consultation = require("../models/Consultation");
 const router = express.Router();
+const { fromBuffer } = require("pdf2pic");
 
 // const MODEL = process.env.MODEL || "gemini-2.5-flash-preview-04-17";
 // const API_KEY = process.env.GENERATIVE_API_KEY;
@@ -32,10 +33,29 @@ router.post("/api/ai-analysis", async (req, res) => {
     const response = await axios.get(fileUrl, { responseType: "arraybuffer" });
     const buffer = Buffer.from(response.data);
 
-    // 2) OCR with Tesseract.js
-    const {
-      data: { text: ocrText },
-    } = await Tesseract.recognize(buffer, OCR_LANG);
+    // 2) OCR with Tesseract.js (first convert PDF→PNG if needed)
+    let ocrText = "";
+
+    if (fileUrl.toLowerCase().endsWith(".pdf")) {
+      // convert all pages of the PDF buffer to PNG files
+      const converter = fromBuffer(buffer, {
+        density: 300,
+        format: "png",
+        width: 1240,
+        savePath: "/tmp",
+      });
+      const pages = await converter.bulk(-1);
+
+      // OCR each page image and concatenate
+      for (const { path } of pages) {
+        const { data: { text } } = await Tesseract.recognize(path, OCR_LANG);
+        ocrText += text + "\n\n";
+      }
+    } else {
+      // directly OCR the image buffer
+      const { data: { text } } = await Tesseract.recognize(buffer, OCR_LANG);
+      ocrText = text;
+    }
 
     // 3) Build our refined medical prompt
     const prompt = `
