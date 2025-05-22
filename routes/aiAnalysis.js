@@ -6,7 +6,8 @@ const { HfInference } = require("@huggingface/inference");
 // const { GoogleGenAI } = require("@google/genai");
 const Consultation = require("../models/Consultation");
 const router = express.Router();
-const { fromBuffer } = require("pdf2pic");
+const sharp = require("sharp");
+const pdfjs = require("pdfjs-dist/legacy/build/pdf.js");
 
 // const MODEL = process.env.MODEL || "gemini-2.5-flash-preview-04-17";
 // const API_KEY = process.env.GENERATIVE_API_KEY;
@@ -33,26 +34,26 @@ router.post("/api/ai-analysis", async (req, res) => {
     const response = await axios.get(fileUrl, { responseType: "arraybuffer" });
     const buffer = Buffer.from(response.data);
 
-    // 2) OCR with Tesseract.js (first convert PDF→PNG if needed)
+    // 2) OCR with Tesseract.js (using Sharp + pdfjs for PDFs)
     let ocrText = "";
 
     if (fileUrl.toLowerCase().endsWith(".pdf")) {
-      // convert all pages of the PDF buffer to PNG files
-      const converter = fromBuffer(buffer, {
-        density: 300,
-        format: "png",
-        width: 1240,
-        savePath: "/tmp",
-      });
-      const pages = await converter.bulk(-1);
+      // load PDF and get number of pages
+      const loadingTask = pdfjs.getDocument({ data: buffer });
+      const pdfDoc = await loadingTask.promise;
+      const pageCount = pdfDoc.numPages;
 
-      // OCR each page image and concatenate
-      for (const { path } of pages) {
-        const { data: { text } } = await Tesseract.recognize(path, OCR_LANG);
+      // rasterize each page with Sharp
+      for (let i = 0; i < pageCount; i++) {
+        const pngBuffer = await sharp(buffer, { density: 300, page: i })
+          .png()
+          .toBuffer();
+
+        const { data: { text } } = await Tesseract.recognize(pngBuffer, OCR_LANG);
         ocrText += text + "\n\n";
       }
     } else {
-      // directly OCR the image buffer
+      // direct image OCR
       const { data: { text } } = await Tesseract.recognize(buffer, OCR_LANG);
       ocrText = text;
     }
