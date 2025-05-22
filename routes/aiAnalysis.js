@@ -7,7 +7,7 @@ const { HfInference } = require("@huggingface/inference");
 const Consultation = require("../models/Consultation");
 const router = express.Router();
 const sharp = require("sharp");
-const pdfjs = require("pdfjs-dist/legacy/build/pdf.js");
+const pdfjsLib = require("pdfjs-dist/build/pdf.js");
 
 // const MODEL = process.env.MODEL || "gemini-2.5-flash-preview-04-17";
 // const API_KEY = process.env.GENERATIVE_API_KEY;
