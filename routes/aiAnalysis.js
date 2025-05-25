@@ -1,7 +1,7 @@
 // File: routes/aiAnalysis.js
 const express = require("express");
 const fetch = require("node-fetch");
-const Tesseract = require("tesseract.js");
+// const Tesseract = require("tesseract.js");
 const pdf = require("pdf-parse");
 const axios = require("axios");
 const Consultation = require("../models/Consultation");
@@ -62,7 +62,7 @@ router.post("/api/ai-analysis", async (req, res) => {
       const data = await pdf(buffer);
       extractedText = data.text;
     } else {
-      const { data } = await Tesseract.recognize(buffer, "eng");
+      // const { data } = await Tesseract.recognize(buffer, "eng");
       extractedText = data.text;
     }
 
