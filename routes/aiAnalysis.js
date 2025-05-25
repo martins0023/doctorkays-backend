@@ -2,6 +2,7 @@
 const express = require("express");
 const fetch = require("node-fetch");
 const Tesseract = require("tesseract.js");
+const pdf = require("pdf-parse");
 const axios = require("axios");
 const Consultation = require("../models/Consultation");
 const router = express.Router();
@@ -54,14 +55,16 @@ router.post("/api/ai-analysis", async (req, res) => {
 
     // 1) Fetch the PDF/image, OCR to extract plain text
     const fileResp = await fetch(fileUrl);
-    if (!fileResp.ok) {
-      throw new Error(`Failed to fetch report: ${fileResp.statusText}`);
+    if (!fileResp.ok) throw new Error(`Fetch failed: ${fileResp.statusText}`);
+    const buffer = Buffer.from(await fileResp.arrayBuffer());
+    let extractedText;
+    if (fileUrl.toLowerCase().endsWith(".pdf")) {
+      const data = await pdf(buffer);
+      extractedText = data.text;
+    } else {
+      const { data } = await Tesseract.recognize(buffer, "eng");
+      extractedText = data.text;
     }
-    const arrayBuffer = await fileResp.arrayBuffer();
-    const {
-      data: { text: extractedText },
-    } = await Tesseract.recognize(Buffer.from(arrayBuffer), "eng");
-    console.log("→ OCR text length:", extractedText.length);
 
     // 2) Build the prompt, including translation instruction at end
     const languageName = ({
@@ -102,7 +105,7 @@ ${extractedText}
       { inputs: prompt, parameters: { max_new_tokens: 1024, temperature: 0.2 } },
       { headers: { Authorization: `Bearer ${HF_API_KEY}` } }
     );
-    let raw = hfResp.data[0]?.generated_text?.trim();
+    const raw = hfResp.data[0]?.generated_text?.trim();
     if (!raw) throw new Error("AI returned no content");
 
     // (No further translation needed; prompt already asked for translation)
