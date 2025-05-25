@@ -14,7 +14,7 @@ if (!HF_API_KEY) {
 }
 
 // Google Flan T5 LARGE model on Hugging Face
-const MODEL = "tiiuae/falcon-7b-instruct";
+const MODEL = "bigscience/bloomz-560m";
 
 // Translation models for a handful of target languages
 const TRANSLATION_MODELS = {
