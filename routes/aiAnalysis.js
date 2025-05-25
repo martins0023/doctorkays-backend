@@ -1,81 +1,111 @@
 // File: routes/aiAnalysis.js
 const express = require("express");
-const { GoogleGenAI } = require("@google/genai");
+const fetch = require("node-fetch");
+const Tesseract = require("tesseract.js");
+const axios = require("axios");
 const Consultation = require("../models/Consultation");
 const router = express.Router();
 
-const MODEL = process.env.MODEL || "gemini-2.5-flash-preview-04-17";
-const API_KEY = process.env.GENERATIVE_API_KEY;
-if (!API_KEY) {
-  console.warn(
-    "⚠️  No GENERATIVE_API_KEY found in env — AI analysis will not work!"
-  );
+// ─── Configuration ─────────────────────────────────────────────────────────────
+const HF_API_KEY = process.env.HUGGINGFACE_API_TOKEN;
+if (!HF_API_KEY) {
+  console.warn("⚠️  No HUGGINGFACE_API_KEY found in env — AI analysis will not work!");
 }
 
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+// BioMistral 7B model on Hugging Face
+const MODEL = "BioMistral/BioMistral-7B";
 
+// Translation models for a handful of target languages
+const TRANSLATION_MODELS = {
+  en: null,                     // English — no translation
+  es: "Helsinki-NLP/opus-mt-en-es",
+  fr: "Helsinki-NLP/opus-mt-en-fr",
+  de: "Helsinki-NLP/opus-mt-en-de",
+  zh: "Helsinki-NLP/opus-mt-en-zh",
+};
+
+// Helper: translate `text` from English into `lang` (ISO code)
+async function translate(text, lang) {
+  const model = TRANSLATION_MODELS[lang];
+  if (!model) return text;
+
+  const resp = await axios.post(
+    `https://api-inference.huggingface.co/models/${model}`,
+    { inputs: text },
+    { headers: { Authorization: `Bearer ${HF_API_KEY}` } }
+  );
+  return resp.data[0]?.translation_text || text;
+}
+
+// ─── POST /api/ai-analysis ─────────────────────────────────────────────────────
 router.post("/api/ai-analysis", async (req, res) => {
   try {
-    console.log("→ AI-analysis request body:", req.body);
-    const { fileUrl, userName, userStory } = req.body;
+    console.log("→ AI-analysis request:", req.body);
+    const {
+      fileUrl,
+      userName,
+      userStory,
+      preferredLanguage = "en",
+    } = req.body;
+
     if (!fileUrl || !userName || !userStory) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // 1) Build the prompt
+    // 1) Fetch the PDF/image, OCR to extract plain text
+    const fileResp = await fetch(fileUrl);
+    if (!fileResp.ok) {
+      throw new Error(`Failed to fetch report: ${fileResp.statusText}`);
+    }
+    const arrayBuffer = await fileResp.arrayBuffer();
+    const {
+      data: { text: extractedText },
+    } = await Tesseract.recognize(Buffer.from(arrayBuffer), "eng");
+    console.log("→ OCR text length:", extractedText.length);
+
+    // 2) Build the prompt, including translation instruction at end
+    const languageName = ({
+      en: "English",
+      es: "Spanish",
+      fr: "French",
+      de: "German",
+      zh: "Chinese",
+    })[preferredLanguage] || "English";
+
     const prompt = `
-You are a healthcare AI assistant.  User ${userName} says:
+You are a highly accurate healthcare AI assistant.  User ${userName} says:
 "${userStory}"
 
-Please fetch the report at ${fileUrl} (PDF or image).
-Produce a structured analysis under these headings:
+Below is the text extracted from the medical report:
+---
+${extractedText}
+---
 
-Overall Purpose and Context:
-Structure and Format:
-Content Analysis (Section by Section):
-Strengths of the Sample Report:
-Weaknesses / Areas for Improvement:
-Key Takeaways & Implications:
-Conclusion:
-Next Steps & Recommendations:
+1) Provide a structured analysis under these headings:
+   Overall Purpose and Context:
+   Structure and Format:
+   Content Analysis (Section by Section):
+   Strengths of the Sample Report:
+   Weaknesses / Areas for Improvement:
+   Key Takeaways & Implications:
+   Conclusion:
+   Next Steps & Recommendations:
+
+2) Then give a Concise Summary (max 5 sentences).
+
+3) Finally, translate your entire output into ${languageName}.
 `;
 
-    // 2) Call the Gem-ini model via the @google/genai SDK
-    const response = await ai.models.generateContent({
-      model: MODEL,
-      contents: prompt,
-      // you can optionally pass these in a `parameters` object if supported:
-      temperature: 0.2,
-      maxOutputTokens: 1024,
-    });
+    // 3) Send prompt to BioMistral via Hugging Face Inference API
+    const hfResp = await axios.post(
+      `https://api-inference.huggingface.co/models/${MODEL}`,
+      { inputs: prompt, parameters: { max_new_tokens: 1024, temperature: 0.2 } },
+      { headers: { Authorization: `Bearer ${HF_API_KEY}` } }
+    );
+    let raw = hfResp.data[0]?.generated_text?.trim();
+    if (!raw) throw new Error("AI returned no content");
 
-    console.log("→ SDK raw response:", response);
-    // const c = response.candidates?.[0]?.content;
-    // console.log("→ content keys:", Object.keys(c));
-    // console.log("→ received content:", c);
-
-    // 3) Extract the raw text, handling the SDK’s `content.parts` array
-    const c = response.candidates?.[0]?.content;
-    let raw = "";
-
-    if (c) {
-      if (Array.isArray(c.parts)) {
-        // Join all the text parts
-        raw = c.parts.map((p) => p.text || "").join("");
-      } else if (typeof c === "string") {
-        raw = c;
-      } else if (typeof c.text === "string") {
-        raw = c.text;
-      } else if (typeof c.output === "string") {
-        raw = c.output;
-      }
-    }
-
-    console.log("→ final raw text:", raw);
-
-    if (!raw) {
-      throw new Error("AI returned no text");
-    }
+    // (No further translation needed; prompt already asked for translation)
 
     // 4) Split into named sections
     const analysis = {};
@@ -88,11 +118,11 @@ Next Steps & Recommendations:
 
     // 5) Return structured analysis
     return res.json({ analysis, raw });
-  } catch (e) {
-    console.error("AI analysis failed:", e);
+  } catch (err) {
+    console.error("AI analysis failed:", err);
     return res.status(500).json({
       error: "AI analysis failed",
-      details: e.message || e,
+      details: err.message || err,
     });
   }
 });
