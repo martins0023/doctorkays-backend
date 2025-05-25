@@ -13,8 +13,8 @@ if (!HF_API_KEY) {
   console.warn("⚠️  No HUGGINGFACE_API_KEY found in env — AI analysis will not work!");
 }
 
-// BioMistral 7B model on Hugging Face
-const MODEL = "BioMistral/BioMistral-7B";
+// Google Flan T5 LARGE model on Hugging Face
+const MODEL = "google/flan-t5-large";
 
 // Translation models for a handful of target languages
 const TRANSLATION_MODELS = {
