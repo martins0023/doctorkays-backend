@@ -4,7 +4,7 @@ const { GoogleGenAI } = require("@google/genai");
 const Consultation = require("../models/Consultation");
 const router = express.Router();
 
-const MODEL = process.env.MODEL || "gemini-2.5-flash-preview-04-17";
+const MODEL = process.env.MODEL || "gemini-2.5-pro-preview-03-25";
 const API_KEY = process.env.GENERATIVE_API_KEY;
 if (!API_KEY) {
   console.warn(
@@ -52,6 +52,7 @@ router.post("/api/ai-analysis", async (req, res) => {
      • Never exceed three sentences.  
      • No technical terminology—explain in words any patient can understand.  
      • Do not reference model names or internal processes in your output.
+     • Start with an introductory greetings for ${userName}.
      EXAMPLE:
 User ${userName} says:
 "${userStory}"
