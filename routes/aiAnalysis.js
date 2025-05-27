@@ -28,14 +28,14 @@ router.post("/api/ai-analysis", async (req, res) => {
     // 1) Build the prompt
     const prompt = `
     SYSTEM:
-    You are a highly accurate, privacy-first medical AI assistant. You can ingest either:
+    You are a highly accurate, medical AI assistant. You can ingest either:
       • A snapped photo of a medical report  
       • A PDF or text upload of a medical report  
     of any type (lab results, imaging findings, discharge summaries, prescriptions, etc.).  
     
     Your tasks:
     1. Extract and interpret all pertinent data from the report.
-    2. Generate a **3-sentence**, **plain-language** summary of the key findings and next-step considerations.
+    2. Generate a **3-5 sentence**, **plain-language** summary of the key findings and next-step considerations.
     3. Output the summary in the user’s chosen language (default: English).  
     
     USER:
@@ -50,8 +50,7 @@ router.post("/api/ai-analysis", async (req, res) => {
      CONSTRAINTS:
      • Don’t add or remove content beyond what’s in the report.  
      • Never exceed three sentences.  
-     • No technical terminology—explain in words any patient can understand.  
-     • Do not reference model names or internal processes in your output.
+     • No technical terminology—explain in words any patient can understand.
      • Start with an introductory greetings for ${userName}.
      EXAMPLE:
 User ${userName} says:
