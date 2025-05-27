@@ -10,10 +10,6 @@ const cloudinary = require("cloudinary").v2;
 const nodemailer = require("nodemailer");
 const multer = require("multer"); // Import multer
 
-// const AWS = require('aws-sdk');
-// const s3 = new AWS.S3();
-// const multerS3 = require('multer-s3');
-
 const jwt = require("jsonwebtoken");
 const axios = require("axios");
 
@@ -31,6 +27,7 @@ const enquiryRoutes = require("./routes/enquirycommerce");
 const consultationRoutes = require('./routes/consultationRoutes');
 const feedbackRoutes = require('./routes/feedback');
 const aiRoutes = require("./routes/aiAnalysis");
+const authRoutes = require("./routes/auth");
 
 const Consultation = require("./models/Consultation");
 const { signatureHtml } = require("./utils/signature");
@@ -68,29 +65,6 @@ const fileRequiredTypes = [
   "human",
 ];
 
-// Helper function to upload file to Cloudinary using a stream
-// const uploadToCloudinary = (fileBuffer, originalName) => {
-//   return new Promise((resolve, reject) => {
-//     const stream = cloudinary.uploader.upload_stream(
-//       { folder: "consultationReports",
-//         resource_type: "auto",
-//         access_mode: "public",
-//         // type: "upload",
-//         public_id: originalName, // Preserve original filename
-//         overwrite: false, // Prevent duplicate overwrites
-//         use_filename: true, // Use original filename
-//         unique_filename: false,
-//         filename_override: originalName, // Force filename
-//         sign_url: true
-//     },
-//       (error, result) => {
-//         if (result) resolve(result);
-//         else reject(error);
-//       }
-//     );
-//     stream.end(fileBuffer);
-//   });
-// };
 
 // Upload file buffer to Cloudinary
 const uploadToCloudinary = (fileBuffer, originalName) => {
@@ -137,25 +111,14 @@ const getDownloadUrl = (
   });
 };
 
-// Multer storage engine for S3
-// const upload = multer({
-//   storage: multerS3({
-//     s3,
-//     bucket: process.env.AWS_S3_BUCKET_NAME, // e.g. 'kmc-uploads'
-//     acl: "public-read", // files are publicly readable
-//     key: (req, file, cb) => {
-//       // Use timestamp + original name to avoid collisions
-//       const uniqueName = `${Date.now()}_${file.originalname}`;
-//       cb(null, uniqueName);
-//     },
-//   }),
-// });
+
 
 // Use the routes with proper prefixes
 app.get('/', (req, res) => res.send('👩‍⚕️ backend is up'));
 app.use("/api/enquiry", enquiryRoutes);
 app.use("/api/questions", questionsRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/auth", authRoutes);
 // app.use('/api', consultationRoutes);
 app.use("/api", contactRoutes);
 app.use("/api", volunteerRoutes);
