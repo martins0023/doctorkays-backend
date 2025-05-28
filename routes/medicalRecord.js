@@ -14,7 +14,7 @@ router.get("/:userId", async (req, res) => {
   res.json(record);
 });
 
-router.get("/", auth, async (req, res) => {
+router.get("/", async (req, res) => {
   try {
     // Fetch all users
     const users = await UserPatient.find().lean();
