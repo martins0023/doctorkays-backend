@@ -14,17 +14,43 @@ router.get("/:userId", auth, async (req, res) => {
   res.json(record);
 });
 
+router.get("/", auth, async (req, res) => {
+  try {
+    const records = await MedicalRecord.find()
+      .populate("user", "name email")
+      .lean();
+    res.json(records);
+  } catch (err) {
+    console.error("Error listing records:", err);
+    res.status(500).json({ message: "Server error." });
+  }
+});
+
 // Admin updates record
 router.patch("/:userId", auth, async (req, res) => {
-  // validate req.body as needed…
-  const updates = req.body;
-  updates.updatedAt = Date.now();
-  const record = await MedicalRecord.findOneAndUpdate(
-    { user: req.params.userId },
-    updates,
-    { new: true, upsert: true }
-  );
-  res.json(record);
+  try {
+    const updates = req.body;
+    updates.updatedAt = Date.now();
+    const record = await MedicalRecord.findOneAndUpdate(
+      { user: req.params.userId },
+      updates,
+      { new: true, upsert: true }
+    ).populate("user", "name email");
+    res.json(record);
+  } catch (err) {
+    console.error("Error updating record:", err);
+    res.status(500).json({ message: "Server error." });
+  }
+});
+
+router.delete("/:userId", auth, async (req, res) => {
+  try {
+    await MedicalRecord.findOneAndDelete({ user: req.params.userId });
+    res.json({ message: "Deleted." });
+  } catch (err) {
+    console.error("Error deleting record:", err);
+    res.status(500).json({ message: "Server error." });
+  }
 });
 
 module.exports = router;
