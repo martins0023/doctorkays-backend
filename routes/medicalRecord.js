@@ -1,6 +1,7 @@
 // File: routes/medicalRecord.js
 const express = require("express");
 const MedicalRecord = require("../models/MedicalRecord");
+const UserPatient = require("../models/UserPatient");
 const auth = require("../middleware/auth"); // ensure only admins or the user
 
 const router = express.Router();
