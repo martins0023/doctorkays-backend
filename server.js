@@ -28,6 +28,7 @@ const consultationRoutes = require('./routes/consultationRoutes');
 const feedbackRoutes = require('./routes/feedback');
 const aiRoutes = require("./routes/aiAnalysis");
 const authRoutes = require("./routes/auth");
+const medicalRoutes = require("./routes/medicalRecord");
 
 const Consultation = require("./models/Consultation");
 const { signatureHtml } = require("./utils/signature");
@@ -119,6 +120,7 @@ app.use("/api/enquiry", enquiryRoutes);
 app.use("/api/questions", questionsRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/medical-record", medicalRoutes);
 // app.use('/api', consultationRoutes);
 app.use("/api", contactRoutes);
 app.use("/api", volunteerRoutes);
