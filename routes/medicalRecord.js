@@ -14,14 +14,32 @@ router.get("/:userId", async (req, res) => {
   res.json(record);
 });
 
-router.get("/", async (req, res) => {
+router.get("/", auth, async (req, res) => {
   try {
-    const records = await MedicalRecord.find()
-      .populate("user", "name email")
-      .lean();
+    // Fetch all users
+    const users = await UserPatient.find().lean();
+
+    // For each user, load their record if it exists
+    const records = await Promise.all(
+      users.map(async (u) => {
+        const rec = await MedicalRecord.findOne({ user: u._id }).lean();
+        return {
+          userId: u._id,
+          name: u.name,
+          email: u.email,
+          initialComplaint: rec?.initialComplaint || "",
+          diagnosis: rec?.diagnosis || "",
+          investigations: rec?.investigations || [],
+          actionPlan: rec?.actionPlan || [],
+          appointments: rec?.appointments || [],
+          updatedAt: rec?.updatedAt || u.createdAt,
+        };
+      })
+    );
+
     res.json(records);
   } catch (err) {
-    console.error("Error listing records:", err);
+    console.error("Error listing users+records:", err);
     res.status(500).json({ message: "Server error." });
   }
 });
