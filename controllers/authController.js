@@ -151,6 +151,7 @@ exports.forgotPassword = async (req, res) => {
   const mail = {
     to:      user.email,
     from:    `"KMC HOSPITAL LIMITED." <${process.env.EMAIL_USER}>`,
+    subject: "KMC Consultation Password Reset",
     text: textBody,
     html: htmlBody,
   };
