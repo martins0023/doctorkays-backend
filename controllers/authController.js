@@ -1,10 +1,23 @@
 const { OAuth2Client } = require("google-auth-library");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const crypto  = require("crypto");
+const nodemailer = require("nodemailer");
 const UserPatient = require("../models/UserPatient");
+const { signatureHtml } = require("../utils/signature");
 
 const JWT_SECRET = process.env.JWT_SECRET || "replace_this_with_secure_random";
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+const transporter = nodemailer.createTransport({
+  host: "smtp.zoho.com",
+  port: 465,
+  secure: true,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
 
 exports.signup = async (req, res) => {
   try {
@@ -97,4 +110,61 @@ exports.googleOAuth = async (req, res) => {
     console.error("Google OAuth error:", err);
     return res.status(401).json({ message: "Google token invalid." });
   }
+};
+
+// POST /api/auth/forgot
+exports.forgotPassword = async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: "Email required." });
+
+  const user = await UserPatient.findOne({ email });
+  if (!user) {
+    // for security, still respond 200
+    return res.json({ message: "If that email is in our system, you’ll receive reset instructions." });
+  }
+
+  // 1) generate a one-time token
+  const token = crypto.randomBytes(20).toString("hex");
+  user.resetPasswordToken   = token;
+  user.resetPasswordExpires = Date.now() + 15 * 60 * 1000; // 15 minutes
+  await user.save();
+
+  // 2) Email it
+  const resetURL = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+  const mail = {
+    to:      user.email,
+    from:    process.env.EMAIL_USER,
+    subject: "Consultation Password Reset",
+    text: `You requested a password reset. Click or paste in your browser:\n\n${resetURL}\n\nIf you didn’t request this, please ignore.`,
+    html: `${signatureHtml}`,
+  };
+  await transporter.sendMail(mail);
+
+  res.json({ message: "Password reset instructions sent if that email exists." });
+};
+
+// POST /api/auth/reset
+exports.resetPassword = async (req, res) => {
+  const { token, password, confirmPassword } = req.body;
+  if (!token || !password || !confirmPassword) {
+    return res.status(400).json({ message: "All fields required." });
+  }
+  if (password !== confirmPassword) {
+    return res.status(400).json({ message: "Passwords do not match." });
+  }
+
+  const user = await UserPatient.findOne({
+    resetPasswordToken: token,
+    resetPasswordExpires: { $gt: Date.now() },
+  });
+  if (!user) {
+    return res.status(400).json({ message: "Token is invalid or expired." });
+  }
+
+  user.password = await bcrypt.hash(password, 12);
+  user.resetPasswordToken = undefined;
+  user.resetPasswordExpires = undefined;
+  await user.save();
+
+  res.json({ message: "Password has been reset. Please sign in." });
 };

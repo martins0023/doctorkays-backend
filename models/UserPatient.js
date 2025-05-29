@@ -10,6 +10,9 @@ const userPatientSchema = new mongoose.Schema({
     unique: true,
   },
   password: { type: String, required: true },
+
+  resetPasswordToken:   String,
+  resetPasswordExpires: Date,
   createdAt: { type: Date, default: Date.now },
 });
 
