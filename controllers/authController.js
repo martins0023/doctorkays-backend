@@ -131,11 +131,28 @@ exports.forgotPassword = async (req, res) => {
 
   // 2) Email it
   const resetURL = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+
+  const textBody = [
+    `You requested a password reset. Click or paste in your browser:`,
+    resetURL,
+    `If you didn’t request this, please ignore.`,
+    ``,
+    signatureHtml
+  ].join("\n");
+
+  // 2) Build an HTML body
+  const htmlBody = `
+    <p>You requested a password reset. Click or paste in your browser:</p>
+    <p><a href="${resetURL}">${resetURL}</a></p>
+    <p>If you didn’t request this, please ignore.</p>
+    ${signatureHtml}  <!-- your HTML signature -->
+  `;
+
   const mail = {
     to:      user.email,
     from:    `"KMC HOSPITAL LIMITED." <${process.env.EMAIL_USER}>`,
-    subject: "KMC Consultation Password Reset",
-    text: `You requested a password reset. Click or paste in your browser:\n\n${resetURL}\n\nIf you didn’t request this, please ignore.`,
+    text: textBody,
+    html: htmlBody,
   };
   await transporter.sendMail(mail);
 
