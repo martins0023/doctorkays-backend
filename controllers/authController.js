@@ -133,10 +133,9 @@ exports.forgotPassword = async (req, res) => {
   const resetURL = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
   const mail = {
     to:      user.email,
-    from:    process.env.EMAIL_USER,
-    subject: "Consultation Password Reset",
+    from:    `"KMC HOSPITAL LIMITED." <${process.env.EMAIL_USER}>`,
+    subject: "KMC Consultation Password Reset",
     text: `You requested a password reset. Click or paste in your browser:\n\n${resetURL}\n\nIf you didn’t request this, please ignore.`,
-    html: `${signatureHtml}`,
   };
   await transporter.sendMail(mail);
 
