@@ -1,7 +1,7 @@
 // File: routes/aiAnalysis.js
 const express = require("express");
 const fetch = require("node-fetch");
-const tesseract = require("node-tesseract-ocr");
+const { createWorker } = require("tesseract.js");
 const { GoogleGenAI } = require("@google/genai");
 const Consultation = require("../models/Consultation");
 const router = express.Router();
@@ -13,19 +13,23 @@ if (!API_KEY) {
     "⚠️  No GENERATIVE_API_KEY found in env — AI analysis will not work!"
   );
 }
-
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 
-// helper: run OCR on a Buffer, return extracted text
+// helper: run OCR on a Buffer via Tesseract.js
 async function runOCR(buffer) {
-  // write buffer to temp file or pipe directly; here we write to temp
-  const tmp = `/tmp/ocr_${Date.now()}.jpg`;
-  await require("fs").promises.writeFile(tmp, buffer);
-  const text = await tesseract.recognize(tmp, {
-    lang: "eng",
-    oem: 1,
-    psm: 3,
+  const worker = createWorker({
+    logger: () => {} // comment out to see logs
   });
+
+  await worker.load();
+  await worker.loadLanguage("eng");
+  await worker.initialize("eng");
+
+  const {
+    data: { text },
+  } = await worker.recognize(buffer);
+
+  await worker.terminate();
   return text;
 }
 
@@ -37,14 +41,15 @@ router.post("/api/ai-analysis", async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // Determine language code (default to 'en' if invalid)
-    const langCode = typeof preferredLanguage === 'string' ? preferredLanguage : 'en';
+    const langCode =
+      typeof preferredLanguage === "string" ? preferredLanguage : "en";
 
-    // 0) If this is an image URL (jpg/png), fetch & OCR‐check
+    // 0) If this is an image URL (jpg/png/webp), fetch & OCR‐check via Tesseract.js
     if (/\.(jpe?g|png|webp)$/i.test(fileUrl)) {
       const resp = await fetch(fileUrl);
-      const buf = await resp.buffer();
-      const ocrText = await runOCR(buf);
+      const buf = await resp.arrayBuffer();
+      const ocrText = await runOCR(Buffer.from(buf));
+
       // If OCR yields almost no text, ask user to retake
       if (!ocrText || ocrText.trim().length < 20) {
         return res.status(422).json({
@@ -55,62 +60,54 @@ router.post("/api/ai-analysis", async (req, res) => {
       }
     }
 
-    // 1) Build the prompt
+    // 1) Build the prompt (unchanged)
     const prompt = `
-    SYSTEM:
-    You are a highly accurate, medical AI assistant. You can ingest either:
-      • A snapped photo of a medical report  
-      • A PDF or text upload of a medical report  
-    of any type (lab results, imaging findings, discharge summaries, prescriptions, etc.).  
-    
-    Your tasks:
-    1. Extract and interpret all pertinent data from the report.
-    2. Generate a **3-5 sentence**, **plain-language** summary of the key findings and next-step considerations.
-    3. Output the summary in the user’s chosen language (default: English).  
-    
-    USER:
-    {“report_image”: <binary image> OR “report_text”: “<raw text of report>”,
-     “language”: "${langCode}"}
+SYSTEM:
+You are a highly accurate, medical AI assistant. You can ingest either:
+  • A snapped photo of a medical report  
+  • A PDF or text upload of a medical report  
+of any type (lab results, imaging findings, discharge summaries, prescriptions, etc.).
 
-     ASSISTANT:
-     1. If the input is illegible or missing sections, respond:  
-        “I’m sorry, this part of the report couldn’t be interpreted clearly.”  
-     2. Otherwise, provide exactly three concise sentences, avoiding medical jargon and speculation.
-     
-     CONSTRAINTS:
-     • Don’t add or remove content beyond what’s in the report.  
-     • Never exceed three sentences.  
-     • No technical terminology—explain in words any patient can understand.
-     • Start with an introductory greetings for ${userName}.
-     EXAMPLE:
+Your tasks:
+1. Extract and interpret all pertinent data from the report.
+2. Generate a **3-5 sentence**, **plain-language** summary of the key findings and next-step considerations.
+3. Output the summary in the user’s chosen language (default: English).
+
+USER:
+{"report_image": <binary image> OR "report_text": "<raw text of report>",
+ "language": "${langCode}"}
+
+ASSISTANT:
+1. If the input is illegible or missing sections, respond:
+   “I’m sorry, this part of the report couldn’t be interpreted clearly.”
+2. Otherwise, provide exactly three concise sentences, avoiding medical jargon and speculation.
+
+CONSTRAINTS:
+• Don’t add or remove content beyond what’s in the report.
+• Never exceed three sentences.
+• No technical terminology—explain in words any patient can understand.
+• Start with an introductory greeting for ${userName}.
+
+EXAMPLE:
 User ${userName} says:
 "${userStory}"
 
 Please fetch the report at ${fileUrl} (PDF or image).
-
 `;
 
-    // 2) Call the Gem-ini model via the @google/genai SDK
+    // 2) Call the GenAI model
     const response = await ai.models.generateContent({
       model: MODEL,
       contents: prompt,
-      // you can optionally pass these in a `parameters` object if supported:
       temperature: 0.2,
       maxOutputTokens: 1024,
     });
 
-    console.log("→ SDK raw response:", response);
-    // const c = response.candidates?.[0]?.content;
-    // console.log("→ content keys:", Object.keys(c));
-    // console.log("→ received content:", c);
-
-    // 3) Extract the raw text, handling the SDK’s `content.parts` array
+    // 3) Extract the raw text (unchanged)
     const c = response.candidates?.[0]?.content;
     let raw = "";
-
     if (c) {
       if (Array.isArray(c.parts)) {
-        // Join all the text parts
         raw = c.parts.map((p) => p.text || "").join("");
       } else if (typeof c === "string") {
         raw = c;
@@ -120,12 +117,7 @@ Please fetch the report at ${fileUrl} (PDF or image).
         raw = c.output;
       }
     }
-
-    console.log("→ final raw text:", raw);
-
-    if (!raw) {
-      throw new Error("AI returned no text");
-    }
+    if (!raw) throw new Error("AI returned no text");
 
     // 4) Split into named sections
     const analysis = {};
@@ -141,7 +133,6 @@ Please fetch the report at ${fileUrl} (PDF or image).
   } catch (e) {
     console.error("AI analysis failed:", e);
     if (e.message === "ImageTooUnclear") {
-      // handled above
       return res.status(422).json({ error: e.message, message: e.message });
     }
     return res.status(500).json({
