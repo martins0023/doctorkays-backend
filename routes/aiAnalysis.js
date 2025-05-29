@@ -1,5 +1,7 @@
 // File: routes/aiAnalysis.js
 const express = require("express");
+const fetch = require("node-fetch");
+const tesseract = require("node-tesseract-ocr");
 const { GoogleGenAI } = require("@google/genai");
 const Consultation = require("../models/Consultation");
 const router = express.Router();
@@ -14,6 +16,19 @@ if (!API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 
+// helper: run OCR on a Buffer, return extracted text
+async function runOCR(buffer) {
+  // write buffer to temp file or pipe directly; here we write to temp
+  const tmp = `/tmp/ocr_${Date.now()}.jpg`;
+  await require("fs").promises.writeFile(tmp, buffer);
+  const text = await tesseract.recognize(tmp, {
+    lang: "eng",
+    oem: 1,
+    psm: 3,
+  });
+  return text;
+}
+
 router.post("/api/ai-analysis", async (req, res) => {
   try {
     console.log("→ AI-analysis request body:", req.body);
@@ -24,6 +39,21 @@ router.post("/api/ai-analysis", async (req, res) => {
 
     // Determine language code (default to 'en' if invalid)
     const langCode = typeof preferredLanguage === 'string' ? preferredLanguage : 'en';
+
+    // 0) If this is an image URL (jpg/png), fetch & OCR‐check
+    if (/\.(jpe?g|png|webp)$/i.test(fileUrl)) {
+      const resp = await fetch(fileUrl);
+      const buf = await resp.buffer();
+      const ocrText = await runOCR(buf);
+      // If OCR yields almost no text, ask user to retake
+      if (!ocrText || ocrText.trim().length < 20) {
+        return res.status(422).json({
+          error: "ImageTooUnclear",
+          message:
+            "We couldn’t read your photo clearly. Please retake it in good lighting.",
+        });
+      }
+    }
 
     // 1) Build the prompt
     const prompt = `
@@ -110,6 +140,10 @@ Please fetch the report at ${fileUrl} (PDF or image).
     return res.json({ analysis, raw });
   } catch (e) {
     console.error("AI analysis failed:", e);
+    if (e.message === "ImageTooUnclear") {
+      // handled above
+      return res.status(422).json({ error: e.message, message: e.message });
+    }
     return res.status(500).json({
       error: "AI analysis failed",
       details: e.message || e,
