@@ -1,9 +1,10 @@
 // File: routes/aiAnalysis.js
 const express = require("express");
 const fetch = require("node-fetch");
-const { createWorker } = require("tesseract.js");
+const tesseract = require("node-tesseract-ocr");
 const { GoogleGenAI } = require("@google/genai");
 const Consultation = require("../models/Consultation");
+const fs = require("fs").promises;
 const router = express.Router();
 
 const MODEL = process.env.MODEL || "gemini-2.5-pro-preview-03-25";
@@ -17,20 +18,27 @@ const ai = new GoogleGenAI({ apiKey: API_KEY });
 
 // helper: run OCR on a Buffer via Tesseract.js
 async function runOCR(buffer) {
-  const worker = createWorker({
-    logger: () => {} // comment out to see logs
-  });
+  const tmp = `/tmp/ocr_${Date.now()}.jpg`;
+  await fs.writeFile(tmp, buffer);
 
-  await worker.load();
-  await worker.loadLanguage("eng");
-  await worker.initialize("eng");
-
-  const {
-    data: { text },
-  } = await worker.recognize(buffer);
-
-  await worker.terminate();
-  return text;
+  try {
+    return await tesseract.recognize(tmp, {
+      lang: "eng",
+      oem: 1,
+      psm: 3,
+    });
+  } catch (err) {
+    // CLI not installed → code 127
+    if (err.code === 127 || /not found/.test(err.message)) {
+      const e = new Error("OCRNotInstalled");
+      e.code = 127;
+      throw e;
+    }
+    // any other OCR error
+    throw err;
+  } finally {
+    fs.unlink(tmp).catch(() => {});
+  }
 }
 
 router.post("/api/ai-analysis", async (req, res) => {
@@ -47,15 +55,23 @@ router.post("/api/ai-analysis", async (req, res) => {
     // 0) If this is an image URL (jpg/png/webp), fetch & OCR‐check via Tesseract.js
     if (/\.(jpe?g|png|webp)$/i.test(fileUrl)) {
       const resp = await fetch(fileUrl);
-      const buf = await resp.arrayBuffer();
-      const ocrText = await runOCR(Buffer.from(buf));
-
-      // If OCR yields almost no text, ask user to retake
-      if (!ocrText || ocrText.trim().length < 20) {
+      const buf = await resp.buffer();
+      let ocrText;
+      try {
+        ocrText = await runOCR(buf);
+      } catch (ocrErr) {
+        if (ocrErr.message === "OCRNotInstalled") {
+          return res
+            .status(500)
+            .json({ error: "OCRNotInstalled", message: "Server OCR engine not available." });
+        }
+        console.warn("OCR failure, skipping legibility check:", ocrErr);
+        ocrText = "";
+      }
+      if (ocrText && ocrText.trim().length < 20) {
         return res.status(422).json({
           error: "ImageTooUnclear",
-          message:
-            "We couldn’t read your photo clearly. Please retake it in good lighting.",
+          message: "We couldn’t read your photo clearly. Please retake it in good lighting.",
         });
       }
     }
@@ -134,6 +150,11 @@ Please fetch the report at ${fileUrl} (PDF or image).
     console.error("AI analysis failed:", e);
     if (e.message === "ImageTooUnclear") {
       return res.status(422).json({ error: e.message, message: e.message });
+    }
+    if (e.message === "OCRNotInstalled") {
+      return res
+        .status(500)
+        .json({ error: e.message, message: "OCR engine not installed on server." });
     }
     return res.status(500).json({
       error: "AI analysis failed",
