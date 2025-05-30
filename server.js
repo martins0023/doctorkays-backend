@@ -121,7 +121,7 @@ app.use("/api/questions", questionsRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/medical-record", medicalRoutes);
-app.use(scanLive);
+app.use("/api", scanLive);
 // app.use('/api', consultationRoutes);
 app.use("/api", contactRoutes);
 app.use("/api", volunteerRoutes);
