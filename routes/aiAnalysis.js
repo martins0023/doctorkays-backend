@@ -1,5 +1,6 @@
 // File: routes/aiAnalysis.js
 const express = require("express");
+const axios = require('axios');
 const fetch = require("node-fetch");
 const tesseract = require("node-tesseract-ocr");
 const { GoogleGenAI } = require("@google/genai");
@@ -153,6 +154,30 @@ CONSTRAINTS:
       error: "AI analysis failed",
       details: e.message || e,
     });
+  }
+});
+
+
+//language translate
+router.post("/api/translate", async (req, res) => {
+  const { text, target } = req.body;
+  if (!text || !target) {
+    return res.status(400).json({ error: "Missing text or target language" });
+  }
+  try {
+    const apiKey = process.env.GOOGLE_TRANSLATE_API_KEY;
+    if (!apiKey) throw new Error("No translate API key configured");
+    const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`;
+    const { data } = await axios.post(url, {
+      q: text,
+      target,
+      format: "text",
+    });
+    const translated = data.data.translations[0].translatedText;
+    res.json({ translated });
+  } catch (err) {
+    console.error("Translate failed:", err);
+    res.status(500).json({ error: "Translation failed", details: err.message });
   }
 });
 
