@@ -7,6 +7,7 @@ const { GoogleGenAI } = require("@google/genai");
 const Consultation = require("../models/Consultation");
 const fs = require("fs").promises;
 const multer = require("multer");
+const upload = multer();  // in-memory storage
 const router = express.Router();
 
 const MODEL = process.env.MODEL || "gemini-2.5-pro-preview-03-25";
