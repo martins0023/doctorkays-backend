@@ -18,7 +18,7 @@ async function ocrBuffer(buffer) {
 // NEW: one-step live scan + AI analysis
 router.post("/live-scan", upload.single("reportFile"), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: "No image" });
+    if (!req.file) return res.status(400).json({ error: "No reportFile" });
 
     // 1) quick OCR check (optional)
     const text = await ocrBuffer(req.file.buffer);
