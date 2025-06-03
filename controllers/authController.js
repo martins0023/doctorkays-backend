@@ -19,6 +19,46 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+// Utility: send a verification email
+async function sendVerificationEmail(user) {
+  // Generate a one‐time token
+  const verificationToken = crypto.randomBytes(20).toString("hex");
+  user.emailVerificationToken = verificationToken;
+  user.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000; 
+  await user.save();
+
+  // Build verification URL
+  const verifyURL = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
+
+  // Plain text body
+  const textBody = [
+    `Thanks for signing up, ${user.name}!`,
+    `Please verify your email by clicking or pasting this link in your browser:`,
+    verifyURL,
+    "",
+    `If you did not create this account, please ignore this message.`,
+    "",
+    signatureHtml, // from your utils
+  ].join("\n");
+
+  // HTML body
+  const htmlBody = `
+    <p>Hi ${user.name},</p>
+    <p>Thanks for signing up! Please verify your email by clicking the link below:</p>
+    <p><a href="${verifyURL}">Verify Your Email</a></p>
+    <p>If you did not create this account, please ignore this email.</p>
+    ${signatureHtml}
+  `;
+
+  await transporter.sendMail({
+    to: user.email,
+    from: `"KMC HOSPITAL LIMITED." <${process.env.EMAIL_USER}>`,
+    subject: "KMC Consultation – Verify Your Email",
+    text: textBody,
+    html: htmlBody,
+  });
+}
+
 exports.signup = async (req, res) => {
   try {
     const { name, email, password, confirmPassword } = req.body;
@@ -43,39 +83,11 @@ exports.signup = async (req, res) => {
     });
 
     // 2) Generate a short‐lived verification token:
-    const verificationToken = crypto.randomBytes(20).toString("hex");
-    user.emailVerificationToken = verificationToken;
-    user.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000; // 24h
+
     await user.save();
 
     // 3) Build a verification URL pointing to our front end:
-    const verifyURL = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
-
-    // 4) Send the email:
-    const textBody = [
-      `Hello ${name},`,
-      `Thank you for signing up at KMC. Please click the link below to verify your email address:`,
-      verifyURL,
-      `If you did not sign up, just ignore this message.`,
-      ``,
-      signatureHtml,
-    ].join("\n");
-
-    const htmlBody = `
-      <p>Hello <strong>${name}</strong>,</p>
-      <p>Thank you for signing up at KMC. Please click the link below to verify your email address:</p>
-      <p><a href="${verifyURL}">${verifyURL}</a></p>
-      <p>If you did not sign up, you can safely ignore this email.</p>
-      ${signatureHtml}
-    `;
-
-    await transporter.sendMail({
-      to:      email,
-      from:    `"KMC HOSPITAL LIMITED." <${process.env.EMAIL_USER}>`,
-      subject: "Please verify your email for KMC Consultation",
-      text:    textBody,
-      html:    htmlBody,
-    });
+    await sendVerificationEmail(user);
 
     // 5) Return a “not verified yet” response:
     return res.status(201).json({
@@ -130,22 +142,37 @@ exports.googleOAuth = async (req, res) => {
     });
     const { email, name } = ticket.getPayload();
 
-    // Check if user exists
     let user = await UserPatient.findOne({ email });
     if (!user) {
-      // create a random password placeholder
-      user = await UserPatient.create({
+      // New Google signup: create unverified user
+      user = new UserPatient({
         name,
         email,
         password: Math.random().toString(36).slice(-8),
+        emailVerified: false,
+      });
+      await user.save();
+
+      // Send verification email
+      await sendVerificationEmail(user);
+
+      return res.status(201).json({
+        message:
+          "Account created via Google. Please check your email for a verification link before signing in.",
       });
     }
 
-    // Issue our JWT
+    // If existing but not verified, remind them to verify:
+    if (!user.emailVerified) {
+      return res
+        .status(403)
+        .json({ message: "Please verify your email before signing in." });
+    }
+
+    // Otherwise (already verified), issue a JWT:
     const token = jwt.sign({ id: user._id, email: user.email }, JWT_SECRET, {
       expiresIn: "7d",
     });
-
     return res.json({
       message: "Signed in with Google",
       user: { id: user._id, name: user.name, email: user.email },
