@@ -28,7 +28,7 @@ async function sendVerificationEmail(user) {
   await user.save();
 
   // Build verification URL
-  const verifyURL = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
+  const verifyURL = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
 
   // Plain text body
   const textBody = [
@@ -57,7 +57,7 @@ async function sendVerificationEmail(user) {
     text: textBody,
     html: htmlBody,
   });
-}
+};
 
 exports.signup = async (req, res) => {
   try {
