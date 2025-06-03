@@ -32,19 +32,58 @@ exports.signup = async (req, res) => {
     if (existing) {
       return res.status(409).json({ message: "Email already in use." });
     }
+
+    // 1) Hash password & create the new user (emailVerified defaults to false)
     const hash = await bcrypt.hash(password, 12);
-    const user = await UserPatient.create({ name, email, password: hash });
-    const token = jwt.sign({ id: user._id, email: user.email }, JWT_SECRET, {
-      expiresIn: "7d",
+    const user = await UserPatient.create({
+      name,
+      email,
+      password: hash,
+      emailVerified: false,
     });
-    res.status(201).json({
-      message: "Account created successfully.",
-      token,
-      user: { name: user.name, email: user.email, id: user._id },
+
+    // 2) Generate a short‐lived verification token:
+    const verificationToken = crypto.randomBytes(20).toString("hex");
+    user.emailVerificationToken = verificationToken;
+    user.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000; // 24h
+    await user.save();
+
+    // 3) Build a verification URL pointing to our front end:
+    const verifyURL = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+
+    // 4) Send the email:
+    const textBody = [
+      `Hello ${name},`,
+      `Thank you for signing up at KMC. Please click the link below to verify your email address:`,
+      verifyURL,
+      `If you did not sign up, just ignore this message.`,
+      ``,
+      signatureHtml,
+    ].join("\n");
+
+    const htmlBody = `
+      <p>Hello <strong>${name}</strong>,</p>
+      <p>Thank you for signing up at KMC. Please click the link below to verify your email address:</p>
+      <p><a href="${verifyURL}">${verifyURL}</a></p>
+      <p>If you did not sign up, you can safely ignore this email.</p>
+      ${signatureHtml}
+    `;
+
+    await transporter.sendMail({
+      to:      email,
+      from:    `"KMC HOSPITAL LIMITED." <${process.env.EMAIL_USER}>`,
+      subject: "Please verify your email for KMC Consultation",
+      text:    textBody,
+      html:    htmlBody,
+    });
+
+    // 5) Return a “not verified yet” response:
+    return res.status(201).json({
+      message: "Account created. Please check your email for verification link."
     });
   } catch (err) {
     console.error("Signup error:", err);
-    res.status(500).json({ message: "Server error." });
+    return res.status(500).json({ message: "Server error." });
   }
 };
 
@@ -58,6 +97,12 @@ exports.signin = async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: "No user with that email." });
     }
+    // ● If not yet verified, reject:
+    if (!user.emailVerified) {
+      return res.status(403).json({
+        message: "Email not verified. Please check your inbox."
+      });
+    }
     const match = await bcrypt.compare(password, user.password);
     if (!match) {
       return res.status(401).json({ message: "Incorrect password." });
@@ -65,14 +110,14 @@ exports.signin = async (req, res) => {
     const token = jwt.sign({ id: user._id, email: user.email }, JWT_SECRET, {
       expiresIn: "7d",
     });
-    res.json({
+    return res.json({
       message: "Signed in successfully.",
       token,
       user: { name: user.name, email: user.email, id: user._id },
     });
   } catch (err) {
     console.error("Signin error:", err);
-    res.status(500).json({ message: "Server error." });
+    return res.status(500).json({ message: "Server error." });
   }
 };
 
@@ -184,4 +229,34 @@ exports.resetPassword = async (req, res) => {
   await user.save();
 
   res.json({ message: "Password has been reset. Please sign in." });
+};
+
+exports.verifyEmail = async (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token) {
+      return res.status(400).json({ message: "Missing token." });
+    }
+
+    // 1) Look up the user with that token, make sure it hasn’t expired
+    const user = await UserPatient.findOne({
+      emailVerificationToken: token,
+      emailVerificationExpires: { $gt: Date.now() },
+    });
+    if (!user) {
+      return res.status(400).json({ message: "Token is invalid or expired." });
+    }
+
+    // 2) Mark as verified:
+    user.emailVerified = true;
+    user.emailVerificationToken = undefined;
+    user.emailVerificationExpires = undefined;
+    await user.save();
+
+    // 3) Inform the front end that verification succeeded
+    return res.json({ message: "Email verified. You may now sign in." });
+  } catch (err) {
+    console.error("verifyEmail error:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
 };

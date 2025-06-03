@@ -11,6 +11,11 @@ const userPatientSchema = new mongoose.Schema({
   },
   password: { type: String, required: true },
 
+  // New fields for email verification:
+  emailVerified:           { type: Boolean, default: false },
+  emailVerificationToken:  { type: String },
+  emailVerificationExpires:{ type: Date },
+
   resetPasswordToken:   String,
   resetPasswordExpires: Date,
   createdAt: { type: Date, default: Date.now },
