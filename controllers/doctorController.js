@@ -37,3 +37,20 @@ exports.createDoctor = async (req, res, next) => {
     next(err);
   }
 };
+
+// PATCH /api/doctors/:id
+exports.updateDoctor = async (req, res, next) => {
+  try {
+    const updates = req.body;
+    const updated = await Doctor.findByIdAndUpdate(
+      req.params.id,
+      { $set: updates },
+      { new: true, runValidators: true }
+    );
+    if (!updated) return res.status(404).json({ message: 'Doctor not found' });
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+};
+
