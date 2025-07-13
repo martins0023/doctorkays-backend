@@ -6,6 +6,7 @@ const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
 const mongoose = require("mongoose");
+// const bodyParser = require('body-parser');
 const cloudinary = require("cloudinary").v2;
 const nodemailer = require("nodemailer");
 const multer = require("multer"); // Import multer
@@ -31,6 +32,7 @@ const authRoutes = require("./routes/auth");
 const medicalRoutes = require("./routes/medicalRecord");
 const scanLive = require("./routes/scanLive");
 const Consultation = require("./models/Consultation");
+const doctorRoutes = require('./routes/doctorRoutes');
 const { signatureHtml } = require("./utils/signature");
 
 const app = express();
@@ -128,6 +130,7 @@ app.use("/api", volunteerRoutes);
 app.use("/api", sponsorRoutes);
 app.use("/api/feedback", feedbackRoutes);
 // Mount routes under a common API path.
+app.use('/api/doctors', doctorRoutes);
 app.use('/api/v1', consultationRoutes);
 app.use(aiRoutes)
 
